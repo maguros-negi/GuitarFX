@@ -1,0 +1,3 @@
+C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/.cxx/Debug/4w5g3n6u/arm64-v8a/CMakeFiles/guitarfx.dir
+C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/.cxx/Debug/4w5g3n6u/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/.cxx/Debug/4w5g3n6u/arm64-v8a/CMakeFiles/rebuild_cache.dir
