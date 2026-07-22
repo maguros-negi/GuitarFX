@@ -85,10 +85,38 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        enableEdgeToEdge()
+        applyImmersiveMode()
         engine.create()
 
         setContent {
             GuitarFxApp(engine)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        window.decorView.post {
+            applyImmersiveMode()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            window.decorView.postDelayed(
+                { applyImmersiveMode() },
+                200L
+            )
+        }
+    }
+
+    private fun applyImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 

@@ -33,6 +33,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -167,6 +170,8 @@ private enum class EffectType(
 @Composable
 private fun GuitarFxApp(engine: AudioEngine) {
     val context = LocalContext.current
+    val settingsRepository = remember { SettingsRepository(context.applicationContext) }
+    val restoredSettings = remember { settingsRepository.loadCurrent() }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -187,45 +192,54 @@ private fun GuitarFxApp(engine: AudioEngine) {
         mutableStateOf(AudioStats())
     }
 
-    var inputGain by remember {
-        mutableFloatStateOf(0f)
-    }
-
-    var outputGain by remember {
-        mutableFloatStateOf(-6f)
-    }
-
-    var muted by remember {
-        mutableStateOf(false)
-    }
-
-    var bypassed by remember {
-        mutableStateOf(false)
-    }
-
+    var inputGain by remember { mutableFloatStateOf(restoredSettings.inputGainDb) }
+    var outputGain by remember { mutableFloatStateOf(restoredSettings.outputGainDb) }
+    var muted by remember { mutableStateOf(restoredSettings.muted) }
+    var bypassed by remember { mutableStateOf(restoredSettings.bypassed) }
     var selectedEffect by remember {
-        mutableStateOf(EffectType.DRIVE)
+        mutableStateOf(
+            EffectType.entries.firstOrNull {
+                it.nativeId == restoredSettings.selectedEffectId
+            } ?: EffectType.DRIVE
+        )
     }
-
-    var limiterEnabled by remember {
-        mutableStateOf(true)
-    }
+    var limiterEnabled by remember { mutableStateOf(restoredSettings.limiterEnabled) }
+    var gateEnabled by remember { mutableStateOf(restoredSettings.gateEnabled) }
+    var driveEnabled by remember { mutableStateOf(restoredSettings.driveEnabled) }
+    var eqEnabled by remember { mutableStateOf(restoredSettings.eqEnabled) }
+    var delayEnabled by remember { mutableStateOf(restoredSettings.delayEnabled) }
     var diagnosticsExpanded by remember {
         mutableStateOf(false)
     }
-    var gateThresholdDb by remember { mutableFloatStateOf(-50f) }
-    var gateAttackMs by remember { mutableFloatStateOf(5f) }
-    var gateReleaseMs by remember { mutableFloatStateOf(120f) }
-    var eqLowDb by remember { mutableFloatStateOf(0f) }
-    var eqMidDb by remember { mutableFloatStateOf(0f) }
-    var eqHighDb by remember { mutableFloatStateOf(0f) }
-    var driveAmount by remember { mutableFloatStateOf(35f) }
-    var driveTone by remember { mutableFloatStateOf(50f) }
-    var driveLevel by remember { mutableFloatStateOf(50f) }
-    var delayTimeMs by remember { mutableFloatStateOf(350f) }
-    var delayFeedback by remember { mutableFloatStateOf(35f) }
-    var delayMix by remember { mutableFloatStateOf(25f) }
+    var gateThresholdDb by remember { mutableFloatStateOf(restoredSettings.gateThresholdDb) }
+    var gateAttackMs by remember { mutableFloatStateOf(restoredSettings.gateAttackMs) }
+    var gateReleaseMs by remember { mutableFloatStateOf(restoredSettings.gateReleaseMs) }
+    var eqLowDb by remember { mutableFloatStateOf(restoredSettings.eqLowDb) }
+    var eqMidDb by remember { mutableFloatStateOf(restoredSettings.eqMidDb) }
+    var eqHighDb by remember { mutableFloatStateOf(restoredSettings.eqHighDb) }
+    var driveAmount by remember { mutableFloatStateOf(restoredSettings.driveAmount) }
+    var driveTone by remember { mutableFloatStateOf(restoredSettings.driveTone) }
+    var driveLevel by remember { mutableFloatStateOf(restoredSettings.driveLevel) }
+    var delayTimeMs by remember { mutableFloatStateOf(restoredSettings.delayTimeMs) }
+    var delayFeedback by remember { mutableFloatStateOf(restoredSettings.delayFeedback) }
+    var delayMix by remember { mutableFloatStateOf(restoredSettings.delayMix) }
 
+    val currentSettings = GuitarFxSettings(
+        inputGainDb = inputGain, outputGainDb = outputGain, muted = muted,
+        bypassed = bypassed, limiterEnabled = limiterEnabled,
+        gateEnabled = gateEnabled, gateThresholdDb = gateThresholdDb,
+        gateAttackMs = gateAttackMs, gateReleaseMs = gateReleaseMs,
+        driveEnabled = driveEnabled, driveAmount = driveAmount,
+        driveTone = driveTone, driveLevel = driveLevel,
+        eqEnabled = eqEnabled, eqLowDb = eqLowDb, eqMidDb = eqMidDb, eqHighDb = eqHighDb,
+        delayEnabled = delayEnabled, delayTimeMs = delayTimeMs,
+        delayFeedback = delayFeedback, delayMix = delayMix,
+        selectedEffectId = selectedEffect.nativeId
+    )
+    LaunchedEffect(currentSettings) {
+        delay(300.milliseconds)
+        settingsRepository.saveCurrent(currentSettings)
+    }
     LaunchedEffect(Unit) {
         while (true) {
             stats = engine.readStats()
@@ -276,7 +290,8 @@ private fun GuitarFxApp(engine: AudioEngine) {
 
                 EffectChainPanel(
                     selectedEffect = selectedEffect,
-                    stats = stats,
+                    gateEnabled = gateEnabled, driveEnabled = driveEnabled,
+                    eqEnabled = eqEnabled, delayEnabled = delayEnabled,
                     masterBypassed = bypassed,
                     onEffectSelected = { effect ->
                         selectedEffect = effect
@@ -285,7 +300,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
 
                 SelectedEffectPanel(
                     selectedEffect = selectedEffect,
-                    enabled = isEffectEnabled(stats, selectedEffect),
+                    enabled = effectEnabled(selectedEffect, gateEnabled, driveEnabled, eqEnabled, delayEnabled),
                     masterBypassed = bypassed,
                     gateThresholdDb = gateThresholdDb,
                     gateAttackMs = gateAttackMs,
@@ -364,10 +379,35 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         if (selectedEffect == EffectType.DELAY) {
                             engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
                         }
+                        when (selectedEffect) {
+                            EffectType.GATE -> gateEnabled = enabled
+                            EffectType.DRIVE -> driveEnabled = enabled
+                            EffectType.EQ -> eqEnabled = enabled
+                            EffectType.DELAY -> delayEnabled = enabled
+                        }
                         engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
                 )
 
+                SectionLabel(title = "PRESETS", subtitle = "5 USER SLOTS")
+                PresetPanel(
+                    repository = settingsRepository,
+                    currentSettings = currentSettings,
+                    onLoad = { loaded ->
+                        inputGain = loaded.inputGainDb; outputGain = loaded.outputGainDb
+                        limiterEnabled = loaded.limiterEnabled
+                        gateEnabled = loaded.gateEnabled; gateThresholdDb = loaded.gateThresholdDb
+                        gateAttackMs = loaded.gateAttackMs; gateReleaseMs = loaded.gateReleaseMs
+                        driveEnabled = loaded.driveEnabled; driveAmount = loaded.driveAmount
+                        driveTone = loaded.driveTone; driveLevel = loaded.driveLevel
+                        eqEnabled = loaded.eqEnabled; eqLowDb = loaded.eqLowDb
+                        eqMidDb = loaded.eqMidDb; eqHighDb = loaded.eqHighDb
+                        delayEnabled = loaded.delayEnabled; delayTimeMs = loaded.delayTimeMs
+                        delayFeedback = loaded.delayFeedback; delayMix = loaded.delayMix
+                        selectedEffect = EffectType.entries.firstOrNull { it.nativeId == loaded.selectedEffectId } ?: EffectType.DRIVE
+                        applySettingsToEngine(engine, loaded.copy(muted = muted, bypassed = bypassed))
+                    }
+                )
                 SectionLabel(
                     title = "GLOBAL CONTROL",
                     subtitle = "INPUT / MASTER"
@@ -433,6 +473,10 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
                             engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
                             engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
+                            engine.setEffectEnabled(EffectType.GATE.nativeId, gateEnabled)
+                            engine.setEffectEnabled(EffectType.DRIVE.nativeId, driveEnabled)
+                            engine.setEffectEnabled(EffectType.EQ.nativeId, eqEnabled)
+                            engine.setEffectEnabled(EffectType.DELAY.nativeId, delayEnabled)
                             engine.start()
                         }
                     }
@@ -703,7 +747,10 @@ private fun SectionLabel(
 @Composable
 private fun EffectChainPanel(
     selectedEffect: EffectType,
-    stats: AudioStats,
+    gateEnabled: Boolean,
+    driveEnabled: Boolean,
+    eqEnabled: Boolean,
+    delayEnabled: Boolean,
     masterBypassed: Boolean,
     onEffectSelected: (EffectType) -> Unit
 ) {
@@ -736,7 +783,7 @@ private fun EffectChainPanel(
                 EffectBlock(
                     effect = effect,
                     selected = selectedEffect == effect,
-                    enabled = isEffectEnabled(stats, effect),
+                    enabled = effectEnabled(effect, gateEnabled, driveEnabled, eqEnabled, delayEnabled),
                     masterBypassed = masterBypassed,
                     onClick = {
                         onEffectSelected(effect)
@@ -1318,16 +1365,17 @@ private fun ParameterPlaceholder(
     }
 }
 
-private fun isEffectEnabled(
-    stats: AudioStats,
-    effect: EffectType
-): Boolean {
-    return when (effect) {
-        EffectType.GATE -> stats.gateEnabled
-        EffectType.DRIVE -> stats.driveEnabled
-        EffectType.EQ -> stats.eqEnabled
-        EffectType.DELAY -> stats.delayEnabled
-    }
+private fun effectEnabled(
+    effect: EffectType,
+    gate: Boolean,
+    drive: Boolean,
+    eq: Boolean,
+    delay: Boolean
+): Boolean = when (effect) {
+    EffectType.GATE -> gate
+    EffectType.DRIVE -> drive
+    EffectType.EQ -> eq
+    EffectType.DELAY -> delay
 }
 
 private fun firstParameterName(effect: EffectType): String {
@@ -1896,7 +1944,6 @@ private fun DiagnosticsPanel(
                     label = "Sample Rate",
                     value = "${stats.sampleRate} Hz"
                 )
-
                 DiagnosticRow(
                     label = "Frames Per Burst",
                     value = "IN ${stats.inputFramesPerBurst} / " +
@@ -2013,6 +2060,156 @@ private fun DiagnosticRow(
             textAlign = TextAlign.End
         )
     }
+}
+
+
+@Composable
+private fun PresetPanel(
+    repository: SettingsRepository,
+    currentSettings: GuitarFxSettings,
+    onLoad: (GuitarFxSettings) -> Unit
+) {
+    var names by remember { mutableStateOf(repository.presetNames()) }
+    var saveSlot by remember { mutableStateOf<Int?>(null) }
+    var presetName by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(containerColor = PanelBackground),
+        border = BorderStroke(1.dp, PanelBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "USER PRESETS",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.1.sp
+                    )
+                    Text(
+                        text = "${names.count { it != null }} / 5 SAVED",
+                        color = MutedText,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                Text(
+                    text = if (expanded) "▲ CLOSE" else "▼ OPEN",
+                    color = AccentCyan,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = PanelBorder)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (1..5).forEach { slot ->
+                        val savedName = names[slot - 1]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = savedName ?: "PRESET $slot  •  EMPTY",
+                                modifier = Modifier.weight(1f),
+                                color = if (savedName == null) MutedText else Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            TextButton(
+                                onClick = {
+                                    saveSlot = slot
+                                    presetName = savedName ?: "PRESET $slot"
+                                }
+                            ) {
+                                Text("SAVE", fontSize = 9.sp)
+                            }
+                            TextButton(
+                                onClick = {
+                                    repository.loadPreset(slot)?.let {
+                                        onLoad(it.settings)
+                                    }
+                                },
+                                enabled = savedName != null
+                            ) {
+                                Text("LOAD", fontSize = 9.sp)
+                            }
+                            TextButton(
+                                onClick = {
+                                    repository.deletePreset(slot)
+                                    names = repository.presetNames()
+                                },
+                                enabled = savedName != null
+                            ) {
+                                Text("DELETE", fontSize = 9.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    saveSlot?.let { slot ->
+        AlertDialog(
+            onDismissRequest = { saveSlot = null },
+            title = { Text("SAVE PRESET $slot") },
+            text = {
+                OutlinedTextField(
+                    value = presetName,
+                    onValueChange = { presetName = it },
+                    singleLine = true,
+                    label = { Text("Preset name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        repository.savePreset(slot, presetName, currentSettings)
+                        names = repository.presetNames()
+                        saveSlot = null
+                    }
+                ) {
+                    Text("SAVE")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { saveSlot = null }) {
+                    Text("CANCEL")
+                }
+            }
+        )
+    }
+}
+
+private fun applySettingsToEngine(engine: AudioEngine, s: GuitarFxSettings) {
+    engine.setInputGainDb(s.inputGainDb); engine.setOutputGainDb(s.outputGainDb)
+    engine.setMuted(s.muted); engine.setBypassed(s.bypassed); engine.setLimiterEnabled(s.limiterEnabled)
+    engine.setNoiseGateParameters(s.gateThresholdDb, s.gateAttackMs, s.gateReleaseMs)
+    engine.setOverdriveParameters(s.driveAmount, s.driveTone, s.driveLevel)
+    engine.setThreeBandEqGains(s.eqLowDb, s.eqMidDb, s.eqHighDb)
+    engine.setDelayParameters(s.delayTimeMs, s.delayFeedback, s.delayMix)
+    engine.setEffectEnabled(0, s.gateEnabled); engine.setEffectEnabled(1, s.driveEnabled)
+    engine.setEffectEnabled(2, s.eqEnabled); engine.setEffectEnabled(3, s.delayEnabled)
 }
 
 private fun formatSignedOneDecimal(value: Float): String {
