@@ -989,6 +989,13 @@ void NativeAudioEngine::setNoiseGateParameters(
 ) {
     effectChain_.setNoiseGateParameters(thresholdDb, attackMs, releaseMs);
 }
+void NativeAudioEngine::setThreeBandEqGains(
+        float lowDb,
+        float midDb,
+        float highDb
+) {
+    effectChain_.setThreeBandEqGains(lowDb, midDb, highDb);
+}
 
 std::vector<float>
 NativeAudioEngine::stats() const {

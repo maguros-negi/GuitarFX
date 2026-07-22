@@ -180,6 +180,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var gateThresholdDb by remember { mutableFloatStateOf(-50f) }
     var gateAttackMs by remember { mutableFloatStateOf(5f) }
     var gateReleaseMs by remember { mutableFloatStateOf(120f) }
+    var eqLowDb by remember { mutableFloatStateOf(0f) }
+    var eqMidDb by remember { mutableFloatStateOf(0f) }
+    var eqHighDb by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -256,6 +259,21 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         gateReleaseMs = value
                         engine.setNoiseGateParameters(gateThresholdDb, gateAttackMs, value)
                     },
+                    eqLowDb = eqLowDb,
+                    eqMidDb = eqMidDb,
+                    eqHighDb = eqHighDb,
+                    onEqLowChange = { value ->
+                        eqLowDb = value
+                        engine.setThreeBandEqGains(value, eqMidDb, eqHighDb)
+                    },
+                    onEqMidChange = { value ->
+                        eqMidDb = value
+                        engine.setThreeBandEqGains(eqLowDb, value, eqHighDb)
+                    },
+                    onEqHighChange = { value ->
+                        eqHighDb = value
+                        engine.setThreeBandEqGains(eqLowDb, eqMidDb, value)
+                    },
                     onEnabledChange = { enabled ->
                         if (selectedEffect == EffectType.GATE) {
                             engine.setNoiseGateParameters(
@@ -263,6 +281,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
                                 gateAttackMs,
                                 gateReleaseMs
                             )
+                        }
+                        if (selectedEffect == EffectType.EQ) {
+                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
                         }
                         engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
@@ -319,6 +340,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                                 gateAttackMs,
                                 gateReleaseMs
                             )
+                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
                             engine.start()
                         }
                     }
@@ -790,6 +812,12 @@ private fun SelectedEffectPanel(
     onGateThresholdChange: (Float) -> Unit,
     onGateAttackChange: (Float) -> Unit,
     onGateReleaseChange: (Float) -> Unit,
+    eqLowDb: Float,
+    eqMidDb: Float,
+    eqHighDb: Float,
+    onEqLowChange: (Float) -> Unit,
+    onEqMidChange: (Float) -> Unit,
+    onEqHighChange: (Float) -> Unit,
     onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
@@ -910,6 +938,39 @@ private fun SelectedEffectPanel(
                     accentColor = selectedEffect.accentColor,
                     onValueChange = onGateReleaseChange
                 )
+            } else if (selectedEffect == EffectType.EQ) {
+                EqParameterSlider(
+                    label = "LOW",
+                    frequencyText = "250 Hz SHELF",
+                    value = eqLowDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqLowChange
+                )
+                EqParameterSlider(
+                    label = "MID",
+                    frequencyText = "1.0 kHz PEAK",
+                    value = eqMidDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqMidChange
+                )
+                EqParameterSlider(
+                    label = "HIGH",
+                    frequencyText = "2.5 kHz SHELF",
+                    value = eqHighDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqHighChange
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Boost時はクリップを避けるためMASTERを下げてください。",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = WarningOrange,
+                    textAlign = TextAlign.Center,
+                    fontSize = 8.sp
+                )
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -931,6 +992,40 @@ private fun SelectedEffectPanel(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EqParameterSlider(
+    label: String,
+    frequencyText: String,
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(frequencyText, color = MutedText, fontSize = 8.sp)
+            }
+            Text(
+                text = "${formatSignedOneDecimal(value)} dB",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = -12f..12f,
+            enabled = enabled
+        )
     }
 }
 
@@ -1592,6 +1687,11 @@ private fun DiagnosticRow(
             textAlign = TextAlign.End
         )
     }
+}
+
+private fun formatSignedOneDecimal(value: Float): String {
+    val formatted = formatOneDecimal(value)
+    return if (value > 0f) "+$formatted" else formatted
 }
 
 private fun formatOneDecimal(value: Float): String {

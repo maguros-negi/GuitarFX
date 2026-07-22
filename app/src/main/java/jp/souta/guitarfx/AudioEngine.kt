@@ -78,6 +78,11 @@ class AudioEngine {
         attackMs: Float,
         releaseMs: Float
     )
+    external fun setThreeBandEqGains(
+        lowDb: Float,
+        midDb: Float,
+        highDb: Float
+    )
 
     external fun getStats(): FloatArray
     external fun getLastError(): String

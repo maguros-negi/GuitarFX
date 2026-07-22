@@ -1,12 +1,14 @@
 # ninja log v5
-2	494	8064307182446530	build.ninja	db417353b9302b62
-31	1992	8064299723848922	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
-19	2201	8064299725943424	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
-2202	2354	8064299727543790	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	e2951616e0be2e78
-7	1047	8064299714439183	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
-0	23	0	clean	1fd208ba1d1ef161
-36	1488	8064307408461111	CMakeFiles/guitarfx.dir/NoiseGateEffect.cpp.o	be65bde0996bc0a7
-9	1491	8064307408521139	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
+2	312	8064312859937249	build.ninja	db417353b9302b62
 23	2680	8064307420409343	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
 51	2957	8064307423204300	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
 2958	3159	8064307425300859	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	f0a53c3f5dac4c8e
+9	1491	8064307408521139	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
+0	18	0	clean	1fd208ba1d1ef161
+36	1488	8064307408461111	CMakeFiles/guitarfx.dir/NoiseGateEffect.cpp.o	be65bde0996bc0a7
+81	2282	8064312965140542	CMakeFiles/guitarfx.dir/NoiseGateEffect.cpp.o	be65bde0996bc0a7
+23	2287	8064312965200545	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
+141	2295	8064312965302423	CMakeFiles/guitarfx.dir/ThreeBandEqEffect.cpp.o	bffe41fefb8750bd
+189	3261	8064312974955104	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
+55	3574	8064312978089850	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
+3575	3803	8064312980454889	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	cce461254ed7e81

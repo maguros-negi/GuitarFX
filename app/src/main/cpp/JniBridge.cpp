@@ -184,6 +184,21 @@ Java_jp_souta_guitarfx_AudioEngine_setNoiseGateParameters(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setThreeBandEqGains(
+        JNIEnv*,
+        jobject,
+        jfloat lowDb,
+        jfloat midDb,
+        jfloat highDb
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) {
+        engine->setThreeBandEqGains(lowDb, midDb, highDb);
+    }
+}
+
+extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
