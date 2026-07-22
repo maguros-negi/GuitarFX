@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <mutex>
+#include <vector>
 
 static std::unique_ptr<NativeAudioEngine> engine;
 static std::mutex engineMutex;
@@ -14,10 +15,15 @@ Java_jp_souta_guitarfx_AudioEngine_create(
         JNIEnv*,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (!engine) {
-        engine = std::make_unique<NativeAudioEngine>();
+        engine =
+                std::make_unique<
+                        NativeAudioEngine
+                >();
     }
 
     return JNI_TRUE;
@@ -29,9 +35,15 @@ Java_jp_souta_guitarfx_AudioEngine_start(
         JNIEnv*,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
-    return engine && engine->start()
+    if (!engine) {
+        return JNI_FALSE;
+    }
+
+    return engine->start()
            ? JNI_TRUE
            : JNI_FALSE;
 }
@@ -42,7 +54,9 @@ Java_jp_souta_guitarfx_AudioEngine_stop(
         JNIEnv*,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
         engine->stop();
@@ -55,7 +69,9 @@ Java_jp_souta_guitarfx_AudioEngine_destroy(
         JNIEnv*,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
         engine->stop();
@@ -71,7 +87,9 @@ Java_jp_souta_guitarfx_AudioEngine_setInputGainDb(
         jobject,
         jfloat value
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
         engine->setInputGainDb(value);
@@ -85,7 +103,9 @@ Java_jp_souta_guitarfx_AudioEngine_setOutputGainDb(
         jobject,
         jfloat value
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
         engine->setOutputGainDb(value);
@@ -99,10 +119,14 @@ Java_jp_souta_guitarfx_AudioEngine_setMuted(
         jobject,
         jboolean value
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
-        engine->setMuted(value == JNI_TRUE);
+        engine->setMuted(
+                value == JNI_TRUE
+        );
     }
 }
 
@@ -113,10 +137,14 @@ Java_jp_souta_guitarfx_AudioEngine_setBypassed(
         jobject,
         jboolean value
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
     if (engine) {
-        engine->setBypassed(value == JNI_TRUE);
+        engine->setBypassed(
+                value == JNI_TRUE
+        );
     }
 }
 
@@ -126,15 +154,28 @@ Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
-
-    const auto values = engine
-                        ? engine->stats()
-                        : std::vector<float>(11, 0.0f);
-
-    jfloatArray result = env->NewFloatArray(
-            static_cast<jsize>(values.size())
+    std::lock_guard<std::mutex> lock(
+            engineMutex
     );
+
+    if (engine) {
+        engine->processPendingEvents();
+    }
+
+    const auto values =
+            engine
+            ? engine->stats()
+            : std::vector<float>(
+                    11,
+                    0.0f
+            );
+
+    jfloatArray result =
+            env->NewFloatArray(
+                    static_cast<jsize>(
+                            values.size()
+                    )
+            );
 
     if (result == nullptr) {
         return nullptr;
@@ -143,7 +184,9 @@ Java_jp_souta_guitarfx_AudioEngine_getStats(
     env->SetFloatArrayRegion(
             result,
             0,
-            static_cast<jsize>(values.size()),
+            static_cast<jsize>(
+                    values.size()
+            ),
             values.data()
     );
 
@@ -156,11 +199,16 @@ Java_jp_souta_guitarfx_AudioEngine_getLastError(
         JNIEnv* env,
         jobject
 ) {
-    std::lock_guard<std::mutex> lock(engineMutex);
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
 
-    const std::string message = engine
-                                ? engine->lastError()
-                                : "Engine is not created";
+    const std::string message =
+            engine
+            ? engine->lastError()
+            : "Engine is not created";
 
-    return env->NewStringUTF(message.c_str());
+    return env->NewStringUTF(
+            message.c_str()
+    );
 }

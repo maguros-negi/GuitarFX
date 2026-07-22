@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 bool NativeAudioEngine::openInput() {
     oboe::AudioStreamBuilder builder;
@@ -91,112 +90,250 @@ bool NativeAudioEngine::openOutput() {
 bool NativeAudioEngine::start() {
     std::lock_guard<std::mutex> lock(lifecycleMutex_);
 
-    if (running_) {
+    if (running_.load(std::memory_order_acquire)) {
         return true;
     }
+
+    closeStreamsLocked();
+
+    pendingAudioError_.store(
+            0,
+            std::memory_order_release
+    );
 
     setError("");
 
     if (!openInput()) {
+        closeStreamsLocked();
         return false;
     }
 
     if (!openOutput()) {
-        inputStream_->close();
-        inputStream_.reset();
+        closeStreamsLocked();
         return false;
     }
 
-    inputCurrent_ = inputTarget_.load(std::memory_order_relaxed);
-    outputCurrent_ = outputTarget_.load(std::memory_order_relaxed);
+    inputCurrent_ =
+            inputTarget_.load(std::memory_order_relaxed);
 
-    bypassMix_ = bypassTarget_.load(std::memory_order_relaxed)
-                 ? 1.0f
-                 : 0.0f;
+    outputCurrent_ =
+            outputTarget_.load(std::memory_order_relaxed);
 
-    inputPeakDb_.store(-80.0f, std::memory_order_relaxed);
-    outputPeakDb_.store(-80.0f, std::memory_order_relaxed);
+    bypassMix_ =
+            bypassTarget_.load(std::memory_order_relaxed)
+            ? 1.0f
+            : 0.0f;
 
-    auto inResult = inputStream_->requestStart();
+    inputPeakDb_.store(
+            -80.0f,
+            std::memory_order_relaxed
+    );
 
-    if (inResult != oboe::Result::OK) {
+    outputPeakDb_.store(
+            -80.0f,
+            std::memory_order_relaxed
+    );
+
+    auto inputStartResult =
+            inputStream_->requestStart();
+
+    if (inputStartResult != oboe::Result::OK) {
         setError(
                 std::string("Input start failed: ") +
-                oboe::convertToText(inResult)
+                oboe::convertToText(inputStartResult)
         );
 
-        outputStream_->close();
-        inputStream_->close();
-
-        outputStream_.reset();
-        inputStream_.reset();
-
+        closeStreamsLocked();
         return false;
     }
 
-    auto outResult = outputStream_->requestStart();
+    auto outputStartResult =
+            outputStream_->requestStart();
 
-    if (outResult != oboe::Result::OK) {
+    if (outputStartResult != oboe::Result::OK) {
         setError(
                 std::string("Output start failed: ") +
-                oboe::convertToText(outResult)
+                oboe::convertToText(outputStartResult)
         );
 
-        inputStream_->stop();
-        outputStream_->close();
-        inputStream_->close();
-
-        outputStream_.reset();
-        inputStream_.reset();
-
+        closeStreamsLocked();
         return false;
     }
 
-    running_ = true;
+    running_.store(
+            true,
+            std::memory_order_release
+    );
+
     return true;
 }
 
 void NativeAudioEngine::stop() {
     std::lock_guard<std::mutex> lock(lifecycleMutex_);
 
-    running_ = false;
+    running_.store(
+            false,
+            std::memory_order_release
+    );
 
+    pendingAudioError_.store(
+            0,
+            std::memory_order_release
+    );
+
+    closeStreamsLocked();
+
+    inputPeakDb_.store(
+            -80.0f,
+            std::memory_order_relaxed
+    );
+
+    outputPeakDb_.store(
+            -80.0f,
+            std::memory_order_relaxed
+    );
+}
+
+void NativeAudioEngine::closeStreamsLocked() {
     if (outputStream_) {
-        outputStream_->stop();
+        outputStream_->requestStop();
         outputStream_->close();
         outputStream_.reset();
     }
 
     if (inputStream_) {
-        inputStream_->stop();
+        inputStream_->requestStop();
         inputStream_->close();
         inputStream_.reset();
     }
-
-    inputPeakDb_.store(-80.0f, std::memory_order_relaxed);
-    outputPeakDb_.store(-80.0f, std::memory_order_relaxed);
 }
 
-oboe::DataCallbackResult NativeAudioEngine::onAudioReady(
+void NativeAudioEngine::requestDisconnectHandling(
+        oboe::Result error
+) {
+    int32_t errorCode = static_cast<int32_t>(error);
+
+    if (errorCode == 0) {
+        errorCode = static_cast<int32_t>(
+                oboe::Result::ErrorDisconnected
+        );
+    }
+
+    int32_t expected = 0;
+
+    pendingAudioError_.compare_exchange_strong(
+            expected,
+            errorCode,
+            std::memory_order_release,
+            std::memory_order_relaxed
+    );
+
+    running_.store(
+            false,
+            std::memory_order_release
+    );
+}
+
+void NativeAudioEngine::processPendingEvents() {
+    const int32_t errorCode =
+            pendingAudioError_.exchange(
+                    0,
+                    std::memory_order_acq_rel
+            );
+
+    if (errorCode == 0) {
+        return;
+    }
+
+    const auto error =
+            static_cast<oboe::Result>(errorCode);
+
+    {
+        std::lock_guard<std::mutex> lock(
+                lifecycleMutex_
+        );
+
+        running_.store(
+                false,
+                std::memory_order_release
+        );
+
+        closeStreamsLocked();
+
+        inputPeakDb_.store(
+                -80.0f,
+                std::memory_order_relaxed
+        );
+
+        outputPeakDb_.store(
+                -80.0f,
+                std::memory_order_relaxed
+        );
+    }
+
+    setError(
+            std::string(
+                    "Audio device disconnected. "
+                    "Reconnect the device and press START: "
+            ) +
+            oboe::convertToText(error)
+    );
+}
+
+oboe::DataCallbackResult
+NativeAudioEngine::onAudioReady(
         oboe::AudioStream*,
         void* audioData,
         int32_t numFrames
 ) {
-    auto* output = static_cast<float*>(audioData);
+    auto* output =
+            static_cast<float*>(audioData);
 
-    if (!inputStream_ || numFrames <= 0 || outputChannels_ <= 0) {
-        std::fill(
-                output,
-                output + numFrames * std::max(1, outputChannels_),
-                0.0f
-        );
+    if (
+            pendingAudioError_.load(
+                    std::memory_order_acquire
+            ) != 0
+            ) {
+        if (output != nullptr &&
+            numFrames > 0 &&
+            outputChannels_ > 0) {
+            std::fill(
+                    output,
+                    output + numFrames * outputChannels_,
+                    0.0f
+            );
+        }
+
+        return oboe::DataCallbackResult::Stop;
+    }
+
+    if (
+            !inputStream_ ||
+            output == nullptr ||
+            numFrames <= 0 ||
+            outputChannels_ <= 0 ||
+            inputChannels_ <= 0
+            ) {
+        if (output != nullptr && numFrames > 0) {
+            std::fill(
+                    output,
+                    output +
+                    numFrames *
+                    std::max(1, outputChannels_),
+                    0.0f
+            );
+        }
 
         return oboe::DataCallbackResult::Continue;
     }
 
-    const int samplesNeeded = numFrames * inputChannels_;
+    const int32_t samplesNeeded =
+            numFrames * inputChannels_;
 
-    if (samplesNeeded > static_cast<int>(inputBuffer_.size())) {
+    if (
+            samplesNeeded >
+            static_cast<int32_t>(inputBuffer_.size())
+            ) {
         std::fill(
                 output,
                 output + numFrames * outputChannels_,
@@ -212,55 +349,96 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(
             0
     );
 
-    int32_t framesRead = readResult ? readResult.value() : 0;
+    if (!readResult) {
+        requestDisconnectHandling(
+                readResult.error()
+        );
+
+        std::fill(
+                output,
+                output + numFrames * outputChannels_,
+                0.0f
+        );
+
+        return oboe::DataCallbackResult::Stop;
+    }
+
+    int32_t framesRead = readResult.value();
 
     if (framesRead < 0) {
         framesRead = 0;
     }
 
-    const bool isMuted = muted_.load(std::memory_order_relaxed);
+    const bool isMuted =
+            muted_.load(std::memory_order_relaxed);
 
-    const float inTarget =
-            inputTarget_.load(std::memory_order_relaxed);
+    const float inputTarget =
+            inputTarget_.load(
+                    std::memory_order_relaxed
+            );
 
-    const float outTarget =
-            outputTarget_.load(std::memory_order_relaxed);
+    const float outputTarget =
+            outputTarget_.load(
+                    std::memory_order_relaxed
+            );
 
     const float bypassTarget =
-            bypassTarget_.load(std::memory_order_relaxed)
+            bypassTarget_.load(
+                    std::memory_order_relaxed
+            )
             ? 1.0f
             : 0.0f;
+
+    const float validSampleRate =
+            static_cast<float>(
+                    std::max(1, sampleRate_)
+            );
 
     const float smoothing =
             1.0f -
             std::exp(
                     -1.0f /
-                    (0.010f * static_cast<float>(sampleRate_))
+                    (0.010f * validSampleRate)
             );
 
-    float inPeak = 0.0f;
-    float outPeak = 0.0f;
+    float inputPeak = 0.0f;
+    float outputPeak = 0.0f;
 
-    for (int32_t frame = 0; frame < numFrames; ++frame) {
+    for (
+            int32_t frame = 0;
+            frame < numFrames;
+            ++frame
+            ) {
         inputCurrent_ +=
-                (inTarget - inputCurrent_) * smoothing;
+                (inputTarget - inputCurrent_) *
+                smoothing;
 
         outputCurrent_ +=
-                (outTarget - outputCurrent_) * smoothing;
+                (outputTarget - outputCurrent_) *
+                smoothing;
 
         bypassMix_ +=
-                (bypassTarget - bypassMix_) * smoothing;
+                (bypassTarget - bypassMix_) *
+                smoothing;
 
         float input = 0.0f;
 
         if (frame < framesRead) {
-            input = inputBuffer_[frame * inputChannels_];
+            input =
+                    inputBuffer_[
+                            frame * inputChannels_
+                    ];
         }
 
-        inPeak = std::max(inPeak, std::abs(input));
+        inputPeak = std::max(
+                inputPeak,
+                std::abs(input)
+        );
 
         const float normalSignal =
-                input * inputCurrent_ * outputCurrent_;
+                input *
+                inputCurrent_ *
+                outputCurrent_;
 
         const float bypassSignal = input;
 
@@ -272,13 +450,13 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(
             processed = 0.0f;
         }
 
-        outPeak = std::max(
-                outPeak,
+        outputPeak = std::max(
+                outputPeak,
                 std::abs(processed)
         );
 
         for (
-                int channel = 0;
+                int32_t channel = 0;
                 channel < outputChannels_;
                 ++channel
                 ) {
@@ -289,12 +467,12 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(
     }
 
     inputPeakDb_.store(
-            linearToDb(inPeak),
+            linearToDb(inputPeak),
             std::memory_order_relaxed
     );
 
     outputPeakDb_.store(
-            linearToDb(outPeak),
+            linearToDb(outputPeak),
             std::memory_order_relaxed
     );
 
@@ -305,73 +483,105 @@ void NativeAudioEngine::onErrorAfterClose(
         oboe::AudioStream*,
         oboe::Result error
 ) {
-    running_ = false;
-
-    setError(
-            std::string("Audio stream disconnected: ") +
-            oboe::convertToText(error)
-    );
+    requestDisconnectHandling(error);
 }
 
-void NativeAudioEngine::setInputGainDb(float db) {
+void NativeAudioEngine::setInputGainDb(
+        float db
+) {
     inputTarget_.store(
-            dbToLinear(std::clamp(db, -60.0f, 12.0f)),
+            dbToLinear(
+                    std::clamp(db, -60.0f, 12.0f)
+            ),
             std::memory_order_relaxed
     );
 }
 
-void NativeAudioEngine::setOutputGainDb(float db) {
+void NativeAudioEngine::setOutputGainDb(
+        float db
+) {
     outputTarget_.store(
-            dbToLinear(std::clamp(db, -60.0f, 12.0f)),
+            dbToLinear(
+                    std::clamp(db, -60.0f, 12.0f)
+            ),
             std::memory_order_relaxed
     );
 }
 
-void NativeAudioEngine::setMuted(bool value) {
-    muted_.store(value, std::memory_order_relaxed);
+void NativeAudioEngine::setMuted(
+        bool value
+) {
+    muted_.store(
+            value,
+            std::memory_order_relaxed
+    );
 }
 
-void NativeAudioEngine::setBypassed(bool value) {
-    bypassTarget_.store(value, std::memory_order_relaxed);
+void NativeAudioEngine::setBypassed(
+        bool value
+) {
+    bypassTarget_.store(
+            value,
+            std::memory_order_relaxed
+    );
 }
 
-std::vector<float> NativeAudioEngine::stats() const {
+std::vector<float>
+NativeAudioEngine::stats() const {
     float inputXrun = 0.0f;
     float outputXrun = 0.0f;
-    float buffer = 0.0f;
+    float bufferSize = 0.0f;
 
     if (inputStream_) {
-        auto value = inputStream_->getXRunCount();
+        auto value =
+                inputStream_->getXRunCount();
 
         if (value) {
-            inputXrun = static_cast<float>(value.value());
+            inputXrun =
+                    static_cast<float>(
+                            value.value()
+                    );
         }
     }
 
     if (outputStream_) {
-        auto value = outputStream_->getXRunCount();
+        auto value =
+                outputStream_->getXRunCount();
 
         if (value) {
-            outputXrun = static_cast<float>(value.value());
+            outputXrun =
+                    static_cast<float>(
+                            value.value()
+                    );
         }
 
-        buffer = static_cast<float>(
-                outputStream_->getBufferSizeInFrames()
-        );
+        bufferSize =
+                static_cast<float>(
+                        outputStream_
+                                ->getBufferSizeInFrames()
+                );
     }
 
     return {
-            running_ ? 1.0f : 0.0f,
+            running_.load(std::memory_order_acquire)
+            ? 1.0f
+            : 0.0f,
             static_cast<float>(sampleRate_),
             static_cast<float>(framesPerBurst_),
-            buffer,
+            bufferSize,
             static_cast<float>(inputChannels_),
             static_cast<float>(outputChannels_),
-            inputPeakDb_.load(std::memory_order_relaxed),
-            outputPeakDb_.load(std::memory_order_relaxed),
+            inputPeakDb_.load(
+                    std::memory_order_relaxed
+            ),
+            outputPeakDb_.load(
+                    std::memory_order_relaxed
+            ),
             inputXrun,
             outputXrun,
-            bypassTarget_.load(std::memory_order_relaxed)
+            bypassTarget_.load(
+                    std::memory_order_relaxed
+            )
             ? 1.0f
             : 0.0f
     };
@@ -380,24 +590,40 @@ std::vector<float> NativeAudioEngine::stats() const {
 void NativeAudioEngine::setError(
         const std::string& value
 ) {
-    std::lock_guard<std::mutex> lock(errorMutex_);
+    std::lock_guard<std::mutex> lock(
+            errorMutex_
+    );
+
     error_ = value;
 }
 
-std::string NativeAudioEngine::lastError() const {
-    std::lock_guard<std::mutex> lock(errorMutex_);
+std::string
+NativeAudioEngine::lastError() const {
+    std::lock_guard<std::mutex> lock(
+            errorMutex_
+    );
+
     return error_;
 }
 
-float NativeAudioEngine::dbToLinear(float db) {
-    return std::pow(10.0f, db / 20.0f);
+float NativeAudioEngine::dbToLinear(
+        float db
+) {
+    return std::pow(
+            10.0f,
+            db / 20.0f
+    );
 }
 
-float NativeAudioEngine::linearToDb(float value) {
-    return value <= 0.0001f
-           ? -80.0f
-           : std::max(
-                    -80.0f,
-                    20.0f * std::log10(value)
-            );
+float NativeAudioEngine::linearToDb(
+        float value
+) {
+    if (value <= 0.0001f) {
+        return -80.0f;
+    }
+
+    return std::max(
+            -80.0f,
+            20.0f * std::log10(value)
+    );
 }

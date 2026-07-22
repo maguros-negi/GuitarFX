@@ -3,6 +3,7 @@
 #include <oboe/Oboe.h>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -13,6 +14,8 @@ class NativeAudioEngine : public oboe::AudioStreamDataCallback,
 public:
     bool start();
     void stop();
+
+    void processPendingEvents();
 
     void setInputGainDb(float db);
     void setOutputGainDb(float db);
@@ -37,6 +40,8 @@ private:
     bool openInput();
     bool openOutput();
 
+    void closeStreamsLocked();
+    void requestDisconnectHandling(oboe::Result error);
     void setError(const std::string& message);
 
     static float dbToLinear(float db);
@@ -53,6 +58,8 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<bool> muted_{false};
     std::atomic<bool> bypassTarget_{false};
+
+    std::atomic<int32_t> pendingAudioError_{0};
 
     std::atomic<float> inputTarget_{1.0f};
     std::atomic<float> outputTarget_{0.501187f};
