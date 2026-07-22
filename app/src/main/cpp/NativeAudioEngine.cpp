@@ -996,6 +996,13 @@ void NativeAudioEngine::setThreeBandEqGains(
 ) {
     effectChain_.setThreeBandEqGains(lowDb, midDb, highDb);
 }
+void NativeAudioEngine::setOverdriveParameters(
+        float drive,
+        float tone,
+        float level
+) {
+    effectChain_.setOverdriveParameters(drive, tone, level);
+}
 
 std::vector<float>
 NativeAudioEngine::stats() const {

@@ -83,6 +83,11 @@ class AudioEngine {
         midDb: Float,
         highDb: Float
     )
+    external fun setOverdriveParameters(
+        drive: Float,
+        tone: Float,
+        level: Float
+    )
 
     external fun getStats(): FloatArray
     external fun getLastError(): String

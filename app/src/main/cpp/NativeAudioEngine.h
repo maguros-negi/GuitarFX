@@ -33,6 +33,7 @@ public:
     void setEffectEnabled(int32_t effectId, bool enabled);
     void setNoiseGateParameters(float thresholdDb, float attackMs, float releaseMs);
     void setThreeBandEqGains(float lowDb, float midDb, float highDb);
+    void setOverdriveParameters(float drive, float tone, float level);
 
     std::vector<float> stats() const;
     std::string lastError() const;

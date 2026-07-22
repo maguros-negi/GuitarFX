@@ -183,6 +183,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var eqLowDb by remember { mutableFloatStateOf(0f) }
     var eqMidDb by remember { mutableFloatStateOf(0f) }
     var eqHighDb by remember { mutableFloatStateOf(0f) }
+    var driveAmount by remember { mutableFloatStateOf(35f) }
+    var driveTone by remember { mutableFloatStateOf(50f) }
+    var driveLevel by remember { mutableFloatStateOf(50f) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -274,6 +277,21 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         eqHighDb = value
                         engine.setThreeBandEqGains(eqLowDb, eqMidDb, value)
                     },
+                    driveAmount = driveAmount,
+                    driveTone = driveTone,
+                    driveLevel = driveLevel,
+                    onDriveAmountChange = { value ->
+                        driveAmount = value
+                        engine.setOverdriveParameters(value, driveTone, driveLevel)
+                    },
+                    onDriveToneChange = { value ->
+                        driveTone = value
+                        engine.setOverdriveParameters(driveAmount, value, driveLevel)
+                    },
+                    onDriveLevelChange = { value ->
+                        driveLevel = value
+                        engine.setOverdriveParameters(driveAmount, driveTone, value)
+                    },
                     onEnabledChange = { enabled ->
                         if (selectedEffect == EffectType.GATE) {
                             engine.setNoiseGateParameters(
@@ -284,6 +302,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         }
                         if (selectedEffect == EffectType.EQ) {
                             engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
+                        }
+                        if (selectedEffect == EffectType.DRIVE) {
+                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
                         }
                         engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
@@ -341,6 +362,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                                 gateReleaseMs
                             )
                             engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
+                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
                             engine.start()
                         }
                     }
@@ -818,6 +840,12 @@ private fun SelectedEffectPanel(
     onEqLowChange: (Float) -> Unit,
     onEqMidChange: (Float) -> Unit,
     onEqHighChange: (Float) -> Unit,
+    driveAmount: Float,
+    driveTone: Float,
+    driveLevel: Float,
+    onDriveAmountChange: (Float) -> Unit,
+    onDriveToneChange: (Float) -> Unit,
+    onDriveLevelChange: (Float) -> Unit,
     onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
@@ -938,6 +966,31 @@ private fun SelectedEffectPanel(
                     accentColor = selectedEffect.accentColor,
                     onValueChange = onGateReleaseChange
                 )
+            } else if (selectedEffect == EffectType.DRIVE) {
+                PercentParameterSlider(
+                    label = "DRIVE",
+                    hint = "SATURATION",
+                    value = driveAmount,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveAmountChange
+                )
+                PercentParameterSlider(
+                    label = "TONE",
+                    hint = "DARK  ←  →  BRIGHT",
+                    value = driveTone,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveToneChange
+                )
+                PercentParameterSlider(
+                    label = "LEVEL",
+                    hint = "OUTPUT",
+                    value = driveLevel,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveLevelChange
+                )
             } else if (selectedEffect == EffectType.EQ) {
                 EqParameterSlider(
                     label = "LOW",
@@ -992,6 +1045,40 @@ private fun SelectedEffectPanel(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PercentParameterSlider(
+    label: String,
+    hint: String,
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(hint, color = MutedText, fontSize = 8.sp)
+            }
+            Text(
+                text = "${value.roundToInt()} %",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = 0f..100f,
+            enabled = enabled
+        )
     }
 }
 
