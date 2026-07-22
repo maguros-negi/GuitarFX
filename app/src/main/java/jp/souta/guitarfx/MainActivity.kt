@@ -211,6 +211,10 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var diagnosticsExpanded by remember {
         mutableStateOf(false)
     }
+    val pedalboardRegistry = remember { EffectRegistry.Default }
+    var pedalboardState by remember {
+        mutableStateOf(createPedalboardFromV02Settings(restoredSettings, pedalboardRegistry))
+    }
     var gateThresholdDb by remember { mutableFloatStateOf(restoredSettings.gateThresholdDb) }
     var gateAttackMs by remember { mutableFloatStateOf(restoredSettings.gateAttackMs) }
     var gateReleaseMs by remember { mutableFloatStateOf(restoredSettings.gateReleaseMs) }
@@ -284,130 +288,34 @@ private fun GuitarFxApp(engine: AudioEngine) {
                 )
 
                 SectionLabel(
-                    title = "SIGNAL CHAIN",
-                    subtitle = "INPUT  →  EFFECTS  →  OUTPUT"
+                    title = "PEDALBOARD v0.3",
+                    subtitle = "PRODUCTION DYNAMIC CHAIN"
                 )
 
-                EffectChainPanel(
-                    selectedEffect = selectedEffect,
-                    gateEnabled = gateEnabled, driveEnabled = driveEnabled,
-                    eqEnabled = eqEnabled, delayEnabled = delayEnabled,
+                DynamicPedalboardPrototype(
+                    state = pedalboardState,
+                    registry = pedalboardRegistry,
                     masterBypassed = bypassed,
-                    onEffectSelected = { effect ->
-                        selectedEffect = effect
+                    onStructureChange = { updated ->
+                        val wasRunning = stats.running
+                        if (wasRunning) engine.stop()
+                        pedalboardState = updated
+                        val installed = engine.installDynamicPedalboard(updated, pedalboardRegistry)
+                        if (installed && wasRunning) engine.start()
+                    },
+                    onRealtimeChange = { updated, changedEffect ->
+                        pedalboardState = updated
+                        engine.setDynamicEffectEnabled(
+                            changedEffect.instanceId.value,
+                            changedEffect.enabled
+                        )
+                        engine.setDynamicEffectParameters(
+                            changedEffect.instanceId.value,
+                            changedEffect.nativeParameters(pedalboardRegistry)
+                        )
                     }
                 )
 
-                SelectedEffectPanel(
-                    selectedEffect = selectedEffect,
-                    enabled = effectEnabled(selectedEffect, gateEnabled, driveEnabled, eqEnabled, delayEnabled),
-                    masterBypassed = bypassed,
-                    gateThresholdDb = gateThresholdDb,
-                    gateAttackMs = gateAttackMs,
-                    gateReleaseMs = gateReleaseMs,
-                    onGateThresholdChange = { value ->
-                        gateThresholdDb = value
-                        engine.setNoiseGateParameters(value, gateAttackMs, gateReleaseMs)
-                    },
-                    onGateAttackChange = { value ->
-                        gateAttackMs = value
-                        engine.setNoiseGateParameters(gateThresholdDb, value, gateReleaseMs)
-                    },
-                    onGateReleaseChange = { value ->
-                        gateReleaseMs = value
-                        engine.setNoiseGateParameters(gateThresholdDb, gateAttackMs, value)
-                    },
-                    eqLowDb = eqLowDb,
-                    eqMidDb = eqMidDb,
-                    eqHighDb = eqHighDb,
-                    onEqLowChange = { value ->
-                        eqLowDb = value
-                        engine.setThreeBandEqGains(value, eqMidDb, eqHighDb)
-                    },
-                    onEqMidChange = { value ->
-                        eqMidDb = value
-                        engine.setThreeBandEqGains(eqLowDb, value, eqHighDb)
-                    },
-                    onEqHighChange = { value ->
-                        eqHighDb = value
-                        engine.setThreeBandEqGains(eqLowDb, eqMidDb, value)
-                    },
-                    driveAmount = driveAmount,
-                    driveTone = driveTone,
-                    driveLevel = driveLevel,
-                    onDriveAmountChange = { value ->
-                        driveAmount = value
-                        engine.setOverdriveParameters(value, driveTone, driveLevel)
-                    },
-                    onDriveToneChange = { value ->
-                        driveTone = value
-                        engine.setOverdriveParameters(driveAmount, value, driveLevel)
-                    },
-                    onDriveLevelChange = { value ->
-                        driveLevel = value
-                        engine.setOverdriveParameters(driveAmount, driveTone, value)
-                    },
-                    delayTimeMs = delayTimeMs,
-                    delayFeedback = delayFeedback,
-                    delayMix = delayMix,
-                    onDelayTimeChange = { value ->
-                        delayTimeMs = value
-                        engine.setDelayParameters(value, delayFeedback, delayMix)
-                    },
-                    onDelayFeedbackChange = { value ->
-                        delayFeedback = value
-                        engine.setDelayParameters(delayTimeMs, value, delayMix)
-                    },
-                    onDelayMixChange = { value ->
-                        delayMix = value
-                        engine.setDelayParameters(delayTimeMs, delayFeedback, value)
-                    },
-                    onEnabledChange = { enabled ->
-                        if (selectedEffect == EffectType.GATE) {
-                            engine.setNoiseGateParameters(
-                                gateThresholdDb,
-                                gateAttackMs,
-                                gateReleaseMs
-                            )
-                        }
-                        if (selectedEffect == EffectType.EQ) {
-                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
-                        }
-                        if (selectedEffect == EffectType.DRIVE) {
-                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
-                        }
-                        if (selectedEffect == EffectType.DELAY) {
-                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
-                        }
-                        when (selectedEffect) {
-                            EffectType.GATE -> gateEnabled = enabled
-                            EffectType.DRIVE -> driveEnabled = enabled
-                            EffectType.EQ -> eqEnabled = enabled
-                            EffectType.DELAY -> delayEnabled = enabled
-                        }
-                        engine.setEffectEnabled(selectedEffect.nativeId, enabled)
-                    }
-                )
-
-                SectionLabel(title = "PRESETS", subtitle = "5 USER SLOTS")
-                PresetPanel(
-                    repository = settingsRepository,
-                    currentSettings = currentSettings,
-                    onLoad = { loaded ->
-                        inputGain = loaded.inputGainDb; outputGain = loaded.outputGainDb
-                        limiterEnabled = loaded.limiterEnabled
-                        gateEnabled = loaded.gateEnabled; gateThresholdDb = loaded.gateThresholdDb
-                        gateAttackMs = loaded.gateAttackMs; gateReleaseMs = loaded.gateReleaseMs
-                        driveEnabled = loaded.driveEnabled; driveAmount = loaded.driveAmount
-                        driveTone = loaded.driveTone; driveLevel = loaded.driveLevel
-                        eqEnabled = loaded.eqEnabled; eqLowDb = loaded.eqLowDb
-                        eqMidDb = loaded.eqMidDb; eqHighDb = loaded.eqHighDb
-                        delayEnabled = loaded.delayEnabled; delayTimeMs = loaded.delayTimeMs
-                        delayFeedback = loaded.delayFeedback; delayMix = loaded.delayMix
-                        selectedEffect = EffectType.entries.firstOrNull { it.nativeId == loaded.selectedEffectId } ?: EffectType.DRIVE
-                        applySettingsToEngine(engine, loaded.copy(muted = muted, bypassed = bypassed))
-                    }
-                )
                 SectionLabel(
                     title = "GLOBAL CONTROL",
                     subtitle = "INPUT / MASTER"
@@ -465,19 +373,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setMuted(muted)
                             engine.setBypassed(bypassed)
                             engine.setLimiterEnabled(limiterEnabled)
-                            engine.setNoiseGateParameters(
-                                gateThresholdDb,
-                                gateAttackMs,
-                                gateReleaseMs
-                            )
-                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
-                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
-                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
-                            engine.setEffectEnabled(EffectType.GATE.nativeId, gateEnabled)
-                            engine.setEffectEnabled(EffectType.DRIVE.nativeId, driveEnabled)
-                            engine.setEffectEnabled(EffectType.EQ.nativeId, eqEnabled)
-                            engine.setEffectEnabled(EffectType.DELAY.nativeId, delayEnabled)
-                            engine.start()
+                            if (engine.installDynamicPedalboard(pedalboardState, pedalboardRegistry)) {
+                                engine.start()
+                            }
                         }
                     }
                 )

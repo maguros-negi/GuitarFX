@@ -17,6 +17,9 @@ public:
     virtual void prepare(double sampleRate, int32_t maxFramesPerBurst) = 0;
     virtual void reset() = 0;
     virtual float processSample(float input) noexcept = 0;
+    [[nodiscard]] virtual bool requiresContinuousProcessing() const noexcept {
+        return false;
+    }
 
     void setEnabled(bool enabled) noexcept {
         enabled_.store(enabled, std::memory_order_release);

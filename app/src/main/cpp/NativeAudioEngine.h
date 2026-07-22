@@ -3,6 +3,7 @@
 #include <oboe/Oboe.h>
 
 #include "EffectChain.h"
+#include "DynamicEffectChain.h"
 #include "OutputLimiter.h"
 
 #include <atomic>
@@ -37,6 +38,19 @@ public:
     void setOverdriveParameters(float drive, float tone, float level);
     void setDelayParameters(float timeMs, float feedback, float mix);
     void setLimiterEnabled(bool enabled);
+
+    bool beginDynamicChainUpdate();
+    bool addDynamicEffect(
+            const std::string& instanceId,
+            const std::string& modelId,
+            bool enabled,
+            const std::vector<float>& parameters
+    );
+    bool setDynamicEffectEnabled(const std::string& instanceId, bool enabled);
+    bool setDynamicEffectParameters(
+            const std::string& instanceId,
+            const std::vector<float>& parameters
+    );
 
     std::vector<float> stats() const;
     std::string lastError() const;
@@ -121,6 +135,9 @@ private:
     bool xRunBaselineReady_ = false;
 
     EffectChain effectChain_;
+    // v0.3 production signal chain. Structural mutation is allowed only while
+    // the audio streams are stopped. Parameter and enabled updates are atomic.
+    DynamicEffectChain dynamicEffectChain_;
     OutputLimiter outputLimiter_;
     std::vector<float> inputBuffer_;
 };

@@ -4,6 +4,9 @@ project(guitarfx)
 find_package(oboe REQUIRED CONFIG)
 
 add_library(guitarfx SHARED
+    DynamicEffectChain.cpp
+    DynamicEffectInstance.cpp
+    EffectFactory.cpp
     DelayEffect.cpp
     EffectChain.cpp
     NoiseGateEffect.cpp

@@ -240,6 +240,85 @@ Java_jp_souta_guitarfx_AudioEngine_setLimiterEnabled(
         engine->setLimiterEnabled(enabled == JNI_TRUE);
     }
 }
+namespace {
+std::string fromJString(JNIEnv* env, jstring value) {
+    if (value == nullptr) return {};
+    const char* text = env->GetStringUTFChars(value, nullptr);
+    if (text == nullptr) return {};
+    std::string result(text);
+    env->ReleaseStringUTFChars(value, text);
+    return result;
+}
+
+std::vector<float> fromJFloatArray(JNIEnv* env, jfloatArray values) {
+    if (values == nullptr) return {};
+    const jsize size = env->GetArrayLength(values);
+    std::vector<float> result(static_cast<std::size_t>(size));
+    if (size > 0) env->GetFloatArrayRegion(values, 0, size, result.data());
+    return result;
+}
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_beginDynamicChainUpdate(
+        JNIEnv*,
+        jobject
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    return engine && engine->beginDynamicChainUpdate() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_addDynamicEffect(
+        JNIEnv* env,
+        jobject,
+        jstring instanceId,
+        jstring modelId,
+        jboolean enabled,
+        jfloatArray parameters
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (!engine) return JNI_FALSE;
+    return engine->addDynamicEffect(
+            fromJString(env, instanceId),
+            fromJString(env, modelId),
+            enabled == JNI_TRUE,
+            fromJFloatArray(env, parameters)
+    ) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setDynamicEffectEnabled(
+        JNIEnv* env,
+        jobject,
+        jstring instanceId,
+        jboolean enabled
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    return engine && engine->setDynamicEffectEnabled(
+            fromJString(env, instanceId),
+            enabled == JNI_TRUE
+    ) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setDynamicEffectParameters(
+        JNIEnv* env,
+        jobject,
+        jstring instanceId,
+        jfloatArray parameters
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    return engine && engine->setDynamicEffectParameters(
+            fromJString(env, instanceId),
+            fromJFloatArray(env, parameters)
+    ) ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(

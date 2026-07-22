@@ -11,6 +11,7 @@ public:
     void prepare(double sampleRate, int32_t maxFramesPerBurst) override;
     void reset() override;
     float processSample(float input) noexcept override;
+    [[nodiscard]] bool requiresContinuousProcessing() const noexcept override { return true; }
 
     void setParameters(float drivePercent, float tonePercent, float levelPercent) noexcept;
 

@@ -57,6 +57,15 @@ class AudioEngine {
     external fun setOverdriveParameters(drive: Float, tone: Float, level: Float)
     external fun setDelayParameters(timeMs: Float, feedback: Float, mix: Float)
     external fun setLimiterEnabled(enabled: Boolean)
+    external fun beginDynamicChainUpdate(): Boolean
+    external fun addDynamicEffect(
+        instanceId: String,
+        modelId: String,
+        enabled: Boolean,
+        parameters: FloatArray
+    ): Boolean
+    external fun setDynamicEffectEnabled(instanceId: String, enabled: Boolean): Boolean
+    external fun setDynamicEffectParameters(instanceId: String, parameters: FloatArray): Boolean
     external fun getStats(): FloatArray
     external fun getLastError(): String
 
@@ -80,6 +89,29 @@ class AudioEngine {
             limiterEnabled = v[22] > 0.5f,
             gainReductionDb = v[23], clipDetected = v[24] > 0.5f,
             error = getLastError()
+        )
+    }
+}
+
+
+fun EffectInstance.nativeParameters(registry: EffectRegistry): FloatArray {
+    val descriptor = registry.descriptor(modelId) ?: return floatArrayOf()
+    return descriptor.parameters.map { parameter ->
+        parameterValues[parameter.parameterId] ?: parameter.defaultValue
+    }.toFloatArray()
+}
+
+fun AudioEngine.installDynamicPedalboard(
+    state: PedalboardState,
+    registry: EffectRegistry
+): Boolean {
+    if (!beginDynamicChainUpdate()) return false
+    return state.effects.all { effect ->
+        addDynamicEffect(
+            instanceId = effect.instanceId.value,
+            modelId = effect.modelId.persistentId,
+            enabled = effect.enabled,
+            parameters = effect.nativeParameters(registry)
         )
     }
 }

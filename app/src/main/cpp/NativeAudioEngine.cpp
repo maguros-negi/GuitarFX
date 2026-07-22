@@ -173,6 +173,14 @@ bool NativeAudioEngine::openOutput() {
             ),
             largestBurst
     );
+    // Structural edits happen only while streams are stopped. All DSP memory
+    // is prepared here, before the output callback starts.
+    dynamicEffectChain_.prepare(
+            static_cast<double>(
+                    sampleRate_.load(std::memory_order_relaxed)
+            ),
+            largestBurst
+    );
     outputLimiter_.prepare(
             static_cast<double>(sampleRate_.load(std::memory_order_relaxed))
     );
@@ -870,7 +878,7 @@ NativeAudioEngine::onAudioReady(
         const float preEffectSignal =
                 input * inputCurrent_;
         const float effectSignal =
-                effectChain_.processSample(preEffectSignal);
+                dynamicEffectChain_.processSample(preEffectSignal);
         const float normalSignal =
                 effectSignal * outputCurrent_;
 
@@ -1028,6 +1036,59 @@ void NativeAudioEngine::setLimiterEnabled(bool enabled) {
     outputLimiter_.setEnabled(enabled);
 }
 
+bool NativeAudioEngine::beginDynamicChainUpdate() {
+    std::lock_guard<std::mutex> lock(lifecycleMutex_);
+    if (running_.load(std::memory_order_acquire) || inputStream_ || outputStream_) {
+        setError("Dynamic chain structure can only be changed while audio is stopped");
+        return false;
+    }
+    dynamicEffectChain_.clear();
+    return true;
+}
+
+bool NativeAudioEngine::addDynamicEffect(
+        const std::string& instanceId,
+        const std::string& modelId,
+        bool enabled,
+        const std::vector<float>& parameters
+) {
+    std::lock_guard<std::mutex> lock(lifecycleMutex_);
+    if (running_.load(std::memory_order_acquire) || inputStream_ || outputStream_) {
+        setError("Dynamic effect can only be added while audio is stopped");
+        return false;
+    }
+    const auto parsedModelId = effectModelIdFromString(modelId);
+    if (!parsedModelId.has_value()) {
+        setError("Unknown effect model: " + modelId);
+        return false;
+    }
+    if (!dynamicEffectChain_.addEffect(instanceId, parsedModelId.value())) {
+        setError("Failed to add dynamic effect instance: " + instanceId);
+        return false;
+    }
+    if (!dynamicEffectChain_.setEffectParameters(instanceId, parameters)) {
+        dynamicEffectChain_.removeEffect(instanceId);
+        setError("Invalid parameters for dynamic effect instance: " + instanceId);
+        return false;
+    }
+    dynamicEffectChain_.setEffectEnabled(instanceId, enabled);
+    return true;
+}
+
+bool NativeAudioEngine::setDynamicEffectEnabled(
+        const std::string& instanceId,
+        bool enabled
+) {
+    return dynamicEffectChain_.setEffectEnabled(instanceId, enabled);
+}
+
+bool NativeAudioEngine::setDynamicEffectParameters(
+        const std::string& instanceId,
+        const std::vector<float>& parameters
+) {
+    return dynamicEffectChain_.setEffectParameters(instanceId, parameters);
+}
+
 std::vector<float>
 NativeAudioEngine::stats() const {
     return {
@@ -1134,10 +1195,10 @@ NativeAudioEngine::stats() const {
                             std::memory_order_relaxed
                     )
             ),
-            effectChain_.isEffectEnabled(EffectId::Gate) ? 1.0f : 0.0f,
-            effectChain_.isEffectEnabled(EffectId::Drive) ? 1.0f : 0.0f,
-            effectChain_.isEffectEnabled(EffectId::Eq) ? 1.0f : 0.0f,
-            effectChain_.isEffectEnabled(EffectId::Delay) ? 1.0f : 0.0f,
+            dynamicEffectChain_.isAnyModelEnabled(EffectModelId::NoiseGate) ? 1.0f : 0.0f,
+            dynamicEffectChain_.isAnyModelEnabled(EffectModelId::ClassicOverdrive) ? 1.0f : 0.0f,
+            dynamicEffectChain_.isAnyModelEnabled(EffectModelId::ThreeBandEq) ? 1.0f : 0.0f,
+            dynamicEffectChain_.isAnyModelEnabled(EffectModelId::DigitalDelay) ? 1.0f : 0.0f,
             outputLimiter_.isEnabled() ? 1.0f : 0.0f,
             outputLimiter_.gainReductionDb(),
             clipDetected_.load(std::memory_order_relaxed) ? 1.0f : 0.0f
