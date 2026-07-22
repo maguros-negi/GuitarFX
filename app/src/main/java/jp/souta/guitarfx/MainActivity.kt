@@ -212,8 +212,15 @@ private fun GuitarFxApp(engine: AudioEngine) {
         mutableStateOf(false)
     }
     val pedalboardRegistry = remember { EffectRegistry.Default }
+    val dynamicRepository = remember {
+        DynamicPedalboardRepository(context.applicationContext)
+    }
+    val restoredPedalboard = remember {
+        dynamicRepository.loadCurrent(pedalboardRegistry)
+            ?: createPedalboardFromV02Settings(restoredSettings, pedalboardRegistry)
+    }
     var pedalboardState by remember {
-        mutableStateOf(createPedalboardFromV02Settings(restoredSettings, pedalboardRegistry))
+        mutableStateOf(restoredPedalboard)
     }
     var gateThresholdDb by remember { mutableFloatStateOf(restoredSettings.gateThresholdDb) }
     var gateAttackMs by remember { mutableFloatStateOf(restoredSettings.gateAttackMs) }
@@ -243,6 +250,10 @@ private fun GuitarFxApp(engine: AudioEngine) {
     LaunchedEffect(currentSettings) {
         delay(300.milliseconds)
         settingsRepository.saveCurrent(currentSettings)
+    }
+    LaunchedEffect(pedalboardState) {
+        delay(300.milliseconds)
+        dynamicRepository.saveCurrent(pedalboardState)
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -313,6 +324,36 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             changedEffect.instanceId.value,
                             changedEffect.nativeParameters(pedalboardRegistry)
                         )
+                    }
+                )
+
+                SectionLabel(
+                    title = "PRESETS",
+                    subtitle = "5 DYNAMIC USER SLOTS"
+                )
+
+                DynamicPresetPanel(
+                    repository = dynamicRepository,
+                    registry = pedalboardRegistry,
+                    currentBoard = pedalboardState,
+                    inputGainDb = inputGain,
+                    outputGainDb = outputGain,
+                    limiterEnabled = limiterEnabled,
+                    onLoad = { preset ->
+                        val wasRunning = stats.running
+                        if (wasRunning) engine.stop()
+                        inputGain = preset.inputGainDb
+                        outputGain = preset.outputGainDb
+                        limiterEnabled = preset.limiterEnabled
+                        pedalboardState = preset.pedalboard
+                        engine.setInputGainDb(inputGain)
+                        engine.setOutputGainDb(outputGain)
+                        engine.setLimiterEnabled(limiterEnabled)
+                        val installed = engine.installDynamicPedalboard(
+                            preset.pedalboard,
+                            pedalboardRegistry
+                        )
+                        if (installed && wasRunning) engine.start()
                     }
                 )
 

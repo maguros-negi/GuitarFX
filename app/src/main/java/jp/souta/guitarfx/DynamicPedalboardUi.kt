@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +32,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -93,6 +98,12 @@ fun DynamicPedalboardPrototype(
                         onClick = {
                             val selectedState = state.selectEffect(effect.instanceId)
                             onRealtimeChange(selectedState, effect)
+                        },
+                        onMoveBy = { delta ->
+                            val currentIndex = state.effects.indexOfFirst { it.instanceId == effect.instanceId }
+                            if (currentIndex >= 0 && delta != 0) {
+                                onStructureChange(state.moveEffect(effect.instanceId, currentIndex + delta))
+                            }
                         }
                     )
                     Cable()
@@ -128,21 +139,33 @@ fun DynamicPedalboardPrototype(
             onDismissRequest = { addDialogVisible = false },
             title = { Text("ADD EFFECT") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    registry.availableEffects().forEach { descriptor ->
-                        OutlinedButton(
-                            onClick = {
-                                onStructureChange(state.addEffect(descriptor.modelId, registry))
-                                addDialogVisible = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(descriptor.displayName, fontWeight = FontWeight.Bold)
-                                Text(descriptor.category.displayName, fontSize = 9.sp, color = BoardMuted)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    registry.availableEffects()
+                        .groupBy { it.category }
+                        .forEach { (category, effects) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    category.displayName,
+                                    color = BoardCyan,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                                effects.forEach { descriptor ->
+                                    OutlinedButton(
+                                        onClick = {
+                                            onStructureChange(state.addEffect(descriptor.modelId, registry))
+                                            addDialogVisible = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            Text(descriptor.displayName, fontWeight = FontWeight.Bold)
+                                            Text(descriptor.description, fontSize = 9.sp, color = BoardMuted)
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
                 }
             },
             confirmButton = {},
@@ -157,11 +180,40 @@ private fun PedalBlock(
     effect: EffectInstance,
     selected: Boolean,
     masterBypassed: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onMoveBy: (Int) -> Unit
 ) {
     val accent = modelColor(effect.modelId)
+    var dragOffsetX by remember(effect.instanceId) { mutableFloatStateOf(0f) }
+    var dragging by remember(effect.instanceId) { mutableStateOf(false) }
+    val pedalStepPx = with(LocalDensity.current) { 96.dp.toPx() }
     Card(
-        modifier = Modifier.width(82.dp).height(98.dp).clickable(onClick = onClick),
+        modifier = Modifier
+            .width(82.dp)
+            .height(98.dp)
+            .graphicsLayer {
+                translationX = dragOffsetX
+                scaleX = if (dragging) 1.06f else 1f
+                scaleY = if (dragging) 1.06f else 1f
+                shadowElevation = if (dragging) 14f else 0f
+            }
+            .pointerInput(effect.instanceId) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { dragging = true; dragOffsetX = 0f },
+                    onDragCancel = { dragging = false; dragOffsetX = 0f },
+                    onDragEnd = {
+                        val delta = (dragOffsetX / pedalStepPx).roundToInt()
+                        dragging = false
+                        dragOffsetX = 0f
+                        if (delta != 0) onMoveBy(delta)
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX += dragAmount.x
+                    }
+                )
+            }
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = if (selected) accent.copy(alpha = 0.13f) else BoardPanelLight),
         border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) accent else BoardBorder),
         shape = RoundedCornerShape(9.dp)
