@@ -1,0 +1,62 @@
+#include "NativeAudioEngine.h"
+#include <jni.h>
+#include <memory>
+#include <mutex>
+
+static std::unique_ptr<NativeAudioEngine> engine;
+static std::mutex engineMutex;
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_create(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (!engine) engine = std::make_unique<NativeAudioEngine>();
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_souta_guitarfx_AudioEngine_start(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    return engine && engine->start() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_stop(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) engine->stop();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_destroy(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) engine->stop();
+    engine.reset();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setInputGainDb(JNIEnv*, jobject, jfloat value) {
+    if (engine) engine->setInputGainDb(value);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setOutputGainDb(JNIEnv*, jobject, jfloat value) {
+    if (engine) engine->setOutputGainDb(value);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setMuted(JNIEnv*, jobject, jboolean value) {
+    if (engine) engine->setMuted(value == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_jp_souta_guitarfx_AudioEngine_getStats(JNIEnv* env, jobject) {
+    const auto values = engine ? engine->stats() : std::vector<float>(11, 0.0f);
+    jfloatArray result = env->NewFloatArray(static_cast<jsize>(values.size()));
+    env->SetFloatArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_souta_guitarfx_AudioEngine_getLastError(JNIEnv* env, jobject) {
+    const std::string message = engine ? engine->lastError() : "Engine is not created";
+    return env->NewStringUTF(message.c_str());
+}
