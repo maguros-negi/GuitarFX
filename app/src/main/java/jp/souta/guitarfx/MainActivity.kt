@@ -186,6 +186,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var driveAmount by remember { mutableFloatStateOf(35f) }
     var driveTone by remember { mutableFloatStateOf(50f) }
     var driveLevel by remember { mutableFloatStateOf(50f) }
+    var delayTimeMs by remember { mutableFloatStateOf(350f) }
+    var delayFeedback by remember { mutableFloatStateOf(35f) }
+    var delayMix by remember { mutableFloatStateOf(25f) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -292,6 +295,21 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         driveLevel = value
                         engine.setOverdriveParameters(driveAmount, driveTone, value)
                     },
+                    delayTimeMs = delayTimeMs,
+                    delayFeedback = delayFeedback,
+                    delayMix = delayMix,
+                    onDelayTimeChange = { value ->
+                        delayTimeMs = value
+                        engine.setDelayParameters(value, delayFeedback, delayMix)
+                    },
+                    onDelayFeedbackChange = { value ->
+                        delayFeedback = value
+                        engine.setDelayParameters(delayTimeMs, value, delayMix)
+                    },
+                    onDelayMixChange = { value ->
+                        delayMix = value
+                        engine.setDelayParameters(delayTimeMs, delayFeedback, value)
+                    },
                     onEnabledChange = { enabled ->
                         if (selectedEffect == EffectType.GATE) {
                             engine.setNoiseGateParameters(
@@ -305,6 +323,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         }
                         if (selectedEffect == EffectType.DRIVE) {
                             engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
+                        }
+                        if (selectedEffect == EffectType.DELAY) {
+                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
                         }
                         engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
@@ -363,6 +384,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             )
                             engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
                             engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
+                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
                             engine.start()
                         }
                     }
@@ -846,6 +868,12 @@ private fun SelectedEffectPanel(
     onDriveAmountChange: (Float) -> Unit,
     onDriveToneChange: (Float) -> Unit,
     onDriveLevelChange: (Float) -> Unit,
+    delayTimeMs: Float,
+    delayFeedback: Float,
+    delayMix: Float,
+    onDelayTimeChange: (Float) -> Unit,
+    onDelayFeedbackChange: (Float) -> Unit,
+    onDelayMixChange: (Float) -> Unit,
     onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
@@ -1024,6 +1052,30 @@ private fun SelectedEffectPanel(
                     textAlign = TextAlign.Center,
                     fontSize = 8.sp
                 )
+            } else if (selectedEffect == EffectType.DELAY) {
+                DelayTimeSlider(
+                    value = delayTimeMs,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDelayTimeChange
+                )
+                PercentParameterSlider(
+                    label = "FEEDBACK",
+                    hint = "REPEATS 0–90%",
+                    value = delayFeedback,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    valueRange = 0f..90f,
+                    onValueChange = onDelayFeedbackChange
+                )
+                PercentParameterSlider(
+                    label = "MIX",
+                    hint = "DRY / WET",
+                    value = delayMix,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDelayMixChange
+                )
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1049,12 +1101,45 @@ private fun SelectedEffectPanel(
 }
 
 @Composable
+private fun DelayTimeSlider(
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("TIME", color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("20–1000 ms", color = MutedText, fontSize = 8.sp)
+            }
+            Text(
+                text = "${value.roundToInt()} ms",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = 20f..1000f,
+            enabled = enabled
+        )
+    }
+}
+
+@Composable
 private fun PercentParameterSlider(
     label: String,
     hint: String,
     value: Float,
     enabled: Boolean,
     accentColor: Color,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
     onValueChange: (Float) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1076,7 +1161,7 @@ private fun PercentParameterSlider(
         Slider(
             value = value,
             onValueChange = onValueChange,
-            valueRange = 0f..100f,
+            valueRange = valueRange,
             enabled = enabled
         )
     }

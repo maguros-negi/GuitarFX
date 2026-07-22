@@ -4,6 +4,7 @@ project(guitarfx)
 find_package(oboe REQUIRED CONFIG)
 
 add_library(guitarfx SHARED
+    DelayEffect.cpp
     EffectChain.cpp
     NoiseGateEffect.cpp
     OverdriveEffect.cpp

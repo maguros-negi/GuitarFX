@@ -34,6 +34,7 @@ public:
     void setNoiseGateParameters(float thresholdDb, float attackMs, float releaseMs);
     void setThreeBandEqGains(float lowDb, float midDb, float highDb);
     void setOverdriveParameters(float drive, float tone, float level);
+    void setDelayParameters(float timeMs, float feedback, float mix);
 
     std::vector<float> stats() const;
     std::string lastError() const;

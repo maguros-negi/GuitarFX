@@ -88,6 +88,11 @@ class AudioEngine {
         tone: Float,
         level: Float
     )
+    external fun setDelayParameters(
+        timeMs: Float,
+        feedback: Float,
+        mix: Float
+    )
 
     external fun getStats(): FloatArray
     external fun getLastError(): String

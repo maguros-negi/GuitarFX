@@ -1003,6 +1003,13 @@ void NativeAudioEngine::setOverdriveParameters(
 ) {
     effectChain_.setOverdriveParameters(drive, tone, level);
 }
+void NativeAudioEngine::setDelayParameters(
+        float timeMs,
+        float feedback,
+        float mix
+) {
+    effectChain_.setDelayParameters(timeMs, feedback, mix);
+}
 
 std::vector<float>
 NativeAudioEngine::stats() const {

@@ -214,6 +214,21 @@ Java_jp_souta_guitarfx_AudioEngine_setOverdriveParameters(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setDelayParameters(
+        JNIEnv*,
+        jobject,
+        jfloat timeMs,
+        jfloat feedback,
+        jfloat mix
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) {
+        engine->setDelayParameters(timeMs, feedback, mix);
+    }
+}
+
+extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
