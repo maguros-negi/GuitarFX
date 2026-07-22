@@ -982,6 +982,13 @@ void NativeAudioEngine::setEffectEnabled(
             enabled
     );
 }
+void NativeAudioEngine::setNoiseGateParameters(
+        float thresholdDb,
+        float attackMs,
+        float releaseMs
+) {
+    effectChain_.setNoiseGateParameters(thresholdDb, attackMs, releaseMs);
+}
 
 std::vector<float>
 NativeAudioEngine::stats() const {

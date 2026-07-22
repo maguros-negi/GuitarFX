@@ -31,6 +31,7 @@ public:
     void setMuted(bool muted);
     void setBypassed(bool bypassed);
     void setEffectEnabled(int32_t effectId, bool enabled);
+    void setNoiseGateParameters(float thresholdDb, float attackMs, float releaseMs);
 
     std::vector<float> stats() const;
     std::string lastError() const;

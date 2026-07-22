@@ -177,6 +177,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var diagnosticsExpanded by remember {
         mutableStateOf(false)
     }
+    var gateThresholdDb by remember { mutableFloatStateOf(-50f) }
+    var gateAttackMs by remember { mutableFloatStateOf(5f) }
+    var gateReleaseMs by remember { mutableFloatStateOf(120f) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -238,11 +241,30 @@ private fun GuitarFxApp(engine: AudioEngine) {
                     selectedEffect = selectedEffect,
                     enabled = isEffectEnabled(stats, selectedEffect),
                     masterBypassed = bypassed,
+                    gateThresholdDb = gateThresholdDb,
+                    gateAttackMs = gateAttackMs,
+                    gateReleaseMs = gateReleaseMs,
+                    onGateThresholdChange = { value ->
+                        gateThresholdDb = value
+                        engine.setNoiseGateParameters(value, gateAttackMs, gateReleaseMs)
+                    },
+                    onGateAttackChange = { value ->
+                        gateAttackMs = value
+                        engine.setNoiseGateParameters(gateThresholdDb, value, gateReleaseMs)
+                    },
+                    onGateReleaseChange = { value ->
+                        gateReleaseMs = value
+                        engine.setNoiseGateParameters(gateThresholdDb, gateAttackMs, value)
+                    },
                     onEnabledChange = { enabled ->
-                        engine.setEffectEnabled(
-                            selectedEffect.nativeId,
-                            enabled
-                        )
+                        if (selectedEffect == EffectType.GATE) {
+                            engine.setNoiseGateParameters(
+                                gateThresholdDb,
+                                gateAttackMs,
+                                gateReleaseMs
+                            )
+                        }
+                        engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
                 )
 
@@ -292,6 +314,11 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setOutputGainDb(outputGain)
                             engine.setMuted(muted)
                             engine.setBypassed(bypassed)
+                            engine.setNoiseGateParameters(
+                                gateThresholdDb,
+                                gateAttackMs,
+                                gateReleaseMs
+                            )
                             engine.start()
                         }
                     }
@@ -757,6 +784,12 @@ private fun SelectedEffectPanel(
     selectedEffect: EffectType,
     enabled: Boolean,
     masterBypassed: Boolean,
+    gateThresholdDb: Float,
+    gateAttackMs: Float,
+    gateReleaseMs: Float,
+    onGateThresholdChange: (Float) -> Unit,
+    onGateAttackChange: (Float) -> Unit,
+    onGateReleaseChange: (Float) -> Unit,
     onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
@@ -849,36 +882,82 @@ private fun SelectedEffectPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ParameterPlaceholder(
-                    label = firstParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+            if (selectedEffect == EffectType.GATE) {
+                GateParameterSlider(
+                    label = "THRESHOLD",
+                    valueText = "${formatOneDecimal(gateThresholdDb)} dBFS",
+                    value = gateThresholdDb,
+                    valueRange = -80f..-10f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateThresholdChange
                 )
-                ParameterPlaceholder(
-                    label = secondParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+                GateParameterSlider(
+                    label = "ATTACK",
+                    valueText = "${formatOneDecimal(gateAttackMs)} ms",
+                    value = gateAttackMs,
+                    valueRange = 1f..100f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateAttackChange
                 )
-                ParameterPlaceholder(
-                    label = thirdParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+                GateParameterSlider(
+                    label = "RELEASE",
+                    valueText = "${gateReleaseMs.roundToInt()} ms",
+                    value = gateReleaseMs,
+                    valueRange = 10f..1000f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateReleaseChange
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ParameterPlaceholder(firstParameterName(selectedEffect), Modifier.weight(1f))
+                    ParameterPlaceholder(secondParameterName(selectedEffect), Modifier.weight(1f))
+                    ParameterPlaceholder(thirdParameterName(selectedEffect), Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "DSP PARAMETERS COMING NEXT",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MutedText,
+                    textAlign = TextAlign.Center,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
                 )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "DSP PARAMETERS COMING NEXT",
-                modifier = Modifier.fillMaxWidth(),
-                color = MutedText,
-                textAlign = TextAlign.Center,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
-            )
         }
+    }
+}
+
+@Composable
+private fun GateParameterSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(valueText, color = accentColor, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            enabled = enabled
+        )
     }
 }
 

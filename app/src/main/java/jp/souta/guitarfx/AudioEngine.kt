@@ -73,6 +73,11 @@ class AudioEngine {
     external fun setMuted(value: Boolean)
     external fun setBypassed(value: Boolean)
     external fun setEffectEnabled(effectId: Int, enabled: Boolean)
+    external fun setNoiseGateParameters(
+        thresholdDb: Float,
+        attackMs: Float,
+        releaseMs: Float
+    )
 
     external fun getStats(): FloatArray
     external fun getLastError(): String

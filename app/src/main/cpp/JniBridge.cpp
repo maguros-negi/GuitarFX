@@ -169,6 +169,21 @@ Java_jp_souta_guitarfx_AudioEngine_setEffectEnabled(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setNoiseGateParameters(
+        JNIEnv*,
+        jobject,
+        jfloat thresholdDb,
+        jfloat attackMs,
+        jfloat releaseMs
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) {
+        engine->setNoiseGateParameters(thresholdDb, attackMs, releaseMs);
+    }
+}
+
+extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
