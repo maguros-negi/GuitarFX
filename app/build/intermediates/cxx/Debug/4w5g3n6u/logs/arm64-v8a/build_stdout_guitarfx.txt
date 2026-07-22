@@ -1,9 +1,2 @@
 ninja: Entering directory `C:\Users\souta\Downloads\GuitarFX_v0.1\GuitarFX_v0.1\app\.cxx\Debug\4w5g3n6u\arm64-v8a'
-[1/8] Building CXX object CMakeFiles/guitarfx.dir/NoiseGateEffect.cpp.o
-[2/8] Building CXX object CMakeFiles/guitarfx.dir/OverdriveEffect.cpp.o
-[3/8] Building CXX object CMakeFiles/guitarfx.dir/ThreeBandEqEffect.cpp.o
-[4/8] Building CXX object CMakeFiles/guitarfx.dir/EffectChain.cpp.o
-[5/8] Building CXX object CMakeFiles/guitarfx.dir/DelayEffect.cpp.o
-[6/8] Building CXX object CMakeFiles/guitarfx.dir/JniBridge.cpp.o
-[7/8] Building CXX object CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o
-[8/8] Linking CXX shared library C:\Users\souta\Downloads\GuitarFX_v0.1\GuitarFX_v0.1\app\build\intermediates\cxx\Debug\4w5g3n6u\obj\arm64-v8a\libguitarfx.so
+ninja: no work to do.

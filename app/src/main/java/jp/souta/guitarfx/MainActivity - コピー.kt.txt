@@ -177,6 +177,18 @@ private fun GuitarFxApp(engine: AudioEngine) {
     var diagnosticsExpanded by remember {
         mutableStateOf(false)
     }
+    var gateThresholdDb by remember { mutableFloatStateOf(-50f) }
+    var gateAttackMs by remember { mutableFloatStateOf(5f) }
+    var gateReleaseMs by remember { mutableFloatStateOf(120f) }
+    var eqLowDb by remember { mutableFloatStateOf(0f) }
+    var eqMidDb by remember { mutableFloatStateOf(0f) }
+    var eqHighDb by remember { mutableFloatStateOf(0f) }
+    var driveAmount by remember { mutableFloatStateOf(35f) }
+    var driveTone by remember { mutableFloatStateOf(50f) }
+    var driveLevel by remember { mutableFloatStateOf(50f) }
+    var delayTimeMs by remember { mutableFloatStateOf(350f) }
+    var delayFeedback by remember { mutableFloatStateOf(35f) }
+    var delayMix by remember { mutableFloatStateOf(25f) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -238,11 +250,84 @@ private fun GuitarFxApp(engine: AudioEngine) {
                     selectedEffect = selectedEffect,
                     enabled = isEffectEnabled(stats, selectedEffect),
                     masterBypassed = bypassed,
+                    gateThresholdDb = gateThresholdDb,
+                    gateAttackMs = gateAttackMs,
+                    gateReleaseMs = gateReleaseMs,
+                    onGateThresholdChange = { value ->
+                        gateThresholdDb = value
+                        engine.setNoiseGateParameters(value, gateAttackMs, gateReleaseMs)
+                    },
+                    onGateAttackChange = { value ->
+                        gateAttackMs = value
+                        engine.setNoiseGateParameters(gateThresholdDb, value, gateReleaseMs)
+                    },
+                    onGateReleaseChange = { value ->
+                        gateReleaseMs = value
+                        engine.setNoiseGateParameters(gateThresholdDb, gateAttackMs, value)
+                    },
+                    eqLowDb = eqLowDb,
+                    eqMidDb = eqMidDb,
+                    eqHighDb = eqHighDb,
+                    onEqLowChange = { value ->
+                        eqLowDb = value
+                        engine.setThreeBandEqGains(value, eqMidDb, eqHighDb)
+                    },
+                    onEqMidChange = { value ->
+                        eqMidDb = value
+                        engine.setThreeBandEqGains(eqLowDb, value, eqHighDb)
+                    },
+                    onEqHighChange = { value ->
+                        eqHighDb = value
+                        engine.setThreeBandEqGains(eqLowDb, eqMidDb, value)
+                    },
+                    driveAmount = driveAmount,
+                    driveTone = driveTone,
+                    driveLevel = driveLevel,
+                    onDriveAmountChange = { value ->
+                        driveAmount = value
+                        engine.setOverdriveParameters(value, driveTone, driveLevel)
+                    },
+                    onDriveToneChange = { value ->
+                        driveTone = value
+                        engine.setOverdriveParameters(driveAmount, value, driveLevel)
+                    },
+                    onDriveLevelChange = { value ->
+                        driveLevel = value
+                        engine.setOverdriveParameters(driveAmount, driveTone, value)
+                    },
+                    delayTimeMs = delayTimeMs,
+                    delayFeedback = delayFeedback,
+                    delayMix = delayMix,
+                    onDelayTimeChange = { value ->
+                        delayTimeMs = value
+                        engine.setDelayParameters(value, delayFeedback, delayMix)
+                    },
+                    onDelayFeedbackChange = { value ->
+                        delayFeedback = value
+                        engine.setDelayParameters(delayTimeMs, value, delayMix)
+                    },
+                    onDelayMixChange = { value ->
+                        delayMix = value
+                        engine.setDelayParameters(delayTimeMs, delayFeedback, value)
+                    },
                     onEnabledChange = { enabled ->
-                        engine.setEffectEnabled(
-                            selectedEffect.nativeId,
-                            enabled
-                        )
+                        if (selectedEffect == EffectType.GATE) {
+                            engine.setNoiseGateParameters(
+                                gateThresholdDb,
+                                gateAttackMs,
+                                gateReleaseMs
+                            )
+                        }
+                        if (selectedEffect == EffectType.EQ) {
+                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
+                        }
+                        if (selectedEffect == EffectType.DRIVE) {
+                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
+                        }
+                        if (selectedEffect == EffectType.DELAY) {
+                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
+                        }
+                        engine.setEffectEnabled(selectedEffect.nativeId, enabled)
                     }
                 )
 
@@ -292,6 +377,14 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setOutputGainDb(outputGain)
                             engine.setMuted(muted)
                             engine.setBypassed(bypassed)
+                            engine.setNoiseGateParameters(
+                                gateThresholdDb,
+                                gateAttackMs,
+                                gateReleaseMs
+                            )
+                            engine.setThreeBandEqGains(eqLowDb, eqMidDb, eqHighDb)
+                            engine.setOverdriveParameters(driveAmount, driveTone, driveLevel)
+                            engine.setDelayParameters(delayTimeMs, delayFeedback, delayMix)
                             engine.start()
                         }
                     }
@@ -757,6 +850,30 @@ private fun SelectedEffectPanel(
     selectedEffect: EffectType,
     enabled: Boolean,
     masterBypassed: Boolean,
+    gateThresholdDb: Float,
+    gateAttackMs: Float,
+    gateReleaseMs: Float,
+    onGateThresholdChange: (Float) -> Unit,
+    onGateAttackChange: (Float) -> Unit,
+    onGateReleaseChange: (Float) -> Unit,
+    eqLowDb: Float,
+    eqMidDb: Float,
+    eqHighDb: Float,
+    onEqLowChange: (Float) -> Unit,
+    onEqMidChange: (Float) -> Unit,
+    onEqHighChange: (Float) -> Unit,
+    driveAmount: Float,
+    driveTone: Float,
+    driveLevel: Float,
+    onDriveAmountChange: (Float) -> Unit,
+    onDriveToneChange: (Float) -> Unit,
+    onDriveLevelChange: (Float) -> Unit,
+    delayTimeMs: Float,
+    delayFeedback: Float,
+    delayMix: Float,
+    onDelayTimeChange: (Float) -> Unit,
+    onDelayFeedbackChange: (Float) -> Unit,
+    onDelayMixChange: (Float) -> Unit,
     onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
@@ -849,36 +966,265 @@ private fun SelectedEffectPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ParameterPlaceholder(
-                    label = firstParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+            if (selectedEffect == EffectType.GATE) {
+                GateParameterSlider(
+                    label = "THRESHOLD",
+                    valueText = "${formatOneDecimal(gateThresholdDb)} dBFS",
+                    value = gateThresholdDb,
+                    valueRange = -80f..-10f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateThresholdChange
                 )
-                ParameterPlaceholder(
-                    label = secondParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+                GateParameterSlider(
+                    label = "ATTACK",
+                    valueText = "${formatOneDecimal(gateAttackMs)} ms",
+                    value = gateAttackMs,
+                    valueRange = 1f..100f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateAttackChange
                 )
-                ParameterPlaceholder(
-                    label = thirdParameterName(selectedEffect),
-                    modifier = Modifier.weight(1f)
+                GateParameterSlider(
+                    label = "RELEASE",
+                    valueText = "${gateReleaseMs.roundToInt()} ms",
+                    value = gateReleaseMs,
+                    valueRange = 10f..1000f,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onGateReleaseChange
+                )
+            } else if (selectedEffect == EffectType.DRIVE) {
+                PercentParameterSlider(
+                    label = "DRIVE",
+                    hint = "SATURATION",
+                    value = driveAmount,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveAmountChange
+                )
+                PercentParameterSlider(
+                    label = "TONE",
+                    hint = "DARK  ←  →  BRIGHT",
+                    value = driveTone,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveToneChange
+                )
+                PercentParameterSlider(
+                    label = "LEVEL",
+                    hint = "OUTPUT",
+                    value = driveLevel,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDriveLevelChange
+                )
+            } else if (selectedEffect == EffectType.EQ) {
+                EqParameterSlider(
+                    label = "LOW",
+                    frequencyText = "250 Hz SHELF",
+                    value = eqLowDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqLowChange
+                )
+                EqParameterSlider(
+                    label = "MID",
+                    frequencyText = "1.0 kHz PEAK",
+                    value = eqMidDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqMidChange
+                )
+                EqParameterSlider(
+                    label = "HIGH",
+                    frequencyText = "2.5 kHz SHELF",
+                    value = eqHighDb,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onEqHighChange
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Boost時はクリップを避けるためMASTERを下げてください。",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = WarningOrange,
+                    textAlign = TextAlign.Center,
+                    fontSize = 8.sp
+                )
+            } else if (selectedEffect == EffectType.DELAY) {
+                DelayTimeSlider(
+                    value = delayTimeMs,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDelayTimeChange
+                )
+                PercentParameterSlider(
+                    label = "FEEDBACK",
+                    hint = "REPEATS 0–90%",
+                    value = delayFeedback,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    valueRange = 0f..90f,
+                    onValueChange = onDelayFeedbackChange
+                )
+                PercentParameterSlider(
+                    label = "MIX",
+                    hint = "DRY / WET",
+                    value = delayMix,
+                    enabled = !masterBypassed,
+                    accentColor = selectedEffect.accentColor,
+                    onValueChange = onDelayMixChange
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ParameterPlaceholder(firstParameterName(selectedEffect), Modifier.weight(1f))
+                    ParameterPlaceholder(secondParameterName(selectedEffect), Modifier.weight(1f))
+                    ParameterPlaceholder(thirdParameterName(selectedEffect), Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "DSP PARAMETERS COMING NEXT",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MutedText,
+                    textAlign = TextAlign.Center,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
                 )
             }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(8.dp))
-
+@Composable
+private fun DelayTimeSlider(
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("TIME", color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("20–1000 ms", color = MutedText, fontSize = 8.sp)
+            }
             Text(
-                text = "DSP PARAMETERS COMING NEXT",
-                modifier = Modifier.fillMaxWidth(),
-                color = MutedText,
-                textAlign = TextAlign.Center,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
+                text = "${value.roundToInt()} ms",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
             )
         }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = 20f..1000f,
+            enabled = enabled
+        )
+    }
+}
+
+@Composable
+private fun PercentParameterSlider(
+    label: String,
+    hint: String,
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(hint, color = MutedText, fontSize = 8.sp)
+            }
+            Text(
+                text = "${value.roundToInt()} %",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            enabled = enabled
+        )
+    }
+}
+
+@Composable
+private fun EqParameterSlider(
+    label: String,
+    frequencyText: String,
+    value: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(frequencyText, color = MutedText, fontSize = 8.sp)
+            }
+            Text(
+                text = "${formatSignedOneDecimal(value)} dB",
+                color = accentColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = -12f..12f,
+            enabled = enabled
+        )
+    }
+}
+
+@Composable
+private fun GateParameterSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    accentColor: Color,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = MutedText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(valueText, color = accentColor, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            enabled = enabled
+        )
     }
 }
 
@@ -1513,6 +1859,11 @@ private fun DiagnosticRow(
             textAlign = TextAlign.End
         )
     }
+}
+
+private fun formatSignedOneDecimal(value: Float): String {
+    val formatted = formatOneDecimal(value)
+    return if (value > 0f) "+$formatted" else formatted
 }
 
 private fun formatOneDecimal(value: Float): String {

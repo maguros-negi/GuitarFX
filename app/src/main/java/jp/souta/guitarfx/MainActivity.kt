@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -58,6 +60,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
@@ -174,6 +179,9 @@ private fun GuitarFxApp(engine: AudioEngine) {
         mutableStateOf(EffectType.DRIVE)
     }
 
+    var limiterEnabled by remember {
+        mutableStateOf(true)
+    }
     var diagnosticsExpanded by remember {
         mutableStateOf(false)
     }
@@ -217,6 +225,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
+                    .safeDrawingPadding()
                     .padding(
                         start = 14.dp,
                         top = 12.dp,
@@ -351,6 +360,16 @@ private fun GuitarFxApp(engine: AudioEngine) {
                         engine.setOutputGainDb(value)
                     }
                 )
+                MasterProtectionPanel(
+                    limiterEnabled = limiterEnabled,
+                    gainReductionDb = stats.gainReductionDb,
+                    clipDetected = stats.clipDetected,
+                    masterBypassed = bypassed,
+                    onLimiterEnabledChange = { enabled ->
+                        limiterEnabled = enabled
+                        engine.setLimiterEnabled(enabled)
+                    }
+                )
 
                 FootSwitchPanel(
                     hasPermission = hasPermission,
@@ -377,6 +396,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setOutputGainDb(outputGain)
                             engine.setMuted(muted)
                             engine.setBypassed(bypassed)
+                            engine.setLimiterEnabled(limiterEnabled)
                             engine.setNoiseGateParameters(
                                 gateThresholdDb,
                                 gateAttackMs,
@@ -1640,6 +1660,97 @@ private fun StartStopButton(
 }
 
 @Composable
+private fun MasterProtectionPanel(
+    limiterEnabled: Boolean,
+    gainReductionDb: Float,
+    clipDetected: Boolean,
+    masterBypassed: Boolean,
+    onLimiterEnabledChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = PanelBackground),
+        border = BorderStroke(
+            width = if (clipDetected) 2.dp else 1.dp,
+            color = if (clipDetected) ErrorRed else PanelBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "OUTPUT PROTECTION",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = when {
+                        masterBypassed -> "MASTER BYPASS中は迂回"
+                        clipDetected -> "CLIP DETECTED"
+                        gainReductionDb < -0.1f ->
+                            "GAIN REDUCTION ${formatOneDecimal(gainReductionDb)} dB"
+                        else -> "LIMITER READY  •  THRESHOLD -1.0 dBFS"
+                    },
+                    color = when {
+                        clipDetected -> ErrorRed
+                        masterBypassed -> WarningOrange
+                        gainReductionDb < -0.1f -> WarningOrange
+                        else -> MutedText
+                    },
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Surface(
+                color = if (clipDetected) ErrorRed.copy(alpha = 0.18f)
+                    else PanelBackgroundLight,
+                shape = RoundedCornerShape(50),
+                border = BorderStroke(1.dp, if (clipDetected) ErrorRed else PanelBorder)
+            ) {
+                Text(
+                    text = if (clipDetected) "CLIP" else "SAFE",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = if (clipDetected) ErrorRed else PrimaryGreen,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = { onLimiterEnabledChange(!limiterEnabled) },
+                enabled = !masterBypassed,
+                shape = RoundedCornerShape(50),
+                border = BorderStroke(
+                    1.dp,
+                    if (limiterEnabled) PrimaryGreen else PanelBorder
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (limiterEnabled)
+                        PrimaryGreen.copy(alpha = 0.14f) else PanelBackgroundLight,
+                    contentColor = if (limiterEnabled) PrimaryGreen else MutedText
+                )
+            ) {
+                Text(
+                    text = if (limiterEnabled) "LIMITER ON" else "LIMITER OFF",
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ErrorPanel(error: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1802,6 +1913,21 @@ private fun DiagnosticsPanel(
                             "D ${if (stats.driveEnabled) 1 else 0} / " +
                             "E ${if (stats.eqEnabled) 1 else 0} / " +
                             "DL ${if (stats.delayEnabled) 1 else 0}"
+                )
+                DiagnosticRow(
+                    label = "Output Limiter",
+                    value = if (stats.limiterEnabled) "ON" else "OFF",
+                    warning = !stats.limiterEnabled
+                )
+                DiagnosticRow(
+                    label = "Gain Reduction",
+                    value = "${formatOneDecimal(stats.gainReductionDb)} dB",
+                    warning = stats.gainReductionDb < -6f
+                )
+                DiagnosticRow(
+                    label = "Clip Hold",
+                    value = if (stats.clipDetected) "CLIP" else "CLEAR",
+                    warning = stats.clipDetected
                 )
                 DiagnosticRow(
                     label = "Master Bypass",

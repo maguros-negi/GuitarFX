@@ -173,6 +173,11 @@ bool NativeAudioEngine::openOutput() {
             ),
             largestBurst
     );
+    outputLimiter_.prepare(
+            static_cast<double>(sampleRate_.load(std::memory_order_relaxed))
+    );
+    clipHoldSamples_ = 0;
+    clipDetected_.store(false, std::memory_order_relaxed);
 
     const int32_t initialBufferRequest =
             std::max(
@@ -869,10 +874,19 @@ NativeAudioEngine::onAudioReady(
         const float normalSignal =
                 effectSignal * outputCurrent_;
 
+        if (std::abs(normalSignal) >= 1.0f) {
+            clipHoldSamples_ = static_cast<int32_t>(validSampleRate);
+        } else if (clipHoldSamples_ > 0) {
+            --clipHoldSamples_;
+        }
+        clipDetected_.store(clipHoldSamples_ > 0, std::memory_order_relaxed);
+
+        const float limitedSignal =
+                outputLimiter_.processSample(normalSignal);
         const float bypassSignal = input;
 
         float processed =
-                normalSignal *
+                limitedSignal *
                 (1.0f - bypassMix_) +
                 bypassSignal *
                 bypassMix_;
@@ -1010,6 +1024,9 @@ void NativeAudioEngine::setDelayParameters(
 ) {
     effectChain_.setDelayParameters(timeMs, feedback, mix);
 }
+void NativeAudioEngine::setLimiterEnabled(bool enabled) {
+    outputLimiter_.setEnabled(enabled);
+}
 
 std::vector<float>
 NativeAudioEngine::stats() const {
@@ -1120,7 +1137,10 @@ NativeAudioEngine::stats() const {
             effectChain_.isEffectEnabled(EffectId::Gate) ? 1.0f : 0.0f,
             effectChain_.isEffectEnabled(EffectId::Drive) ? 1.0f : 0.0f,
             effectChain_.isEffectEnabled(EffectId::Eq) ? 1.0f : 0.0f,
-            effectChain_.isEffectEnabled(EffectId::Delay) ? 1.0f : 0.0f
+            effectChain_.isEffectEnabled(EffectId::Delay) ? 1.0f : 0.0f,
+            outputLimiter_.isEnabled() ? 1.0f : 0.0f,
+            outputLimiter_.gainReductionDb(),
+            clipDetected_.load(std::memory_order_relaxed) ? 1.0f : 0.0f
     };
 }
 

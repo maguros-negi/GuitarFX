@@ -3,6 +3,7 @@
 #include <oboe/Oboe.h>
 
 #include "EffectChain.h"
+#include "OutputLimiter.h"
 
 #include <atomic>
 #include <cstdint>
@@ -35,6 +36,7 @@ public:
     void setThreeBandEqGains(float lowDb, float midDb, float highDb);
     void setOverdriveParameters(float drive, float tone, float level);
     void setDelayParameters(float timeMs, float feedback, float mix);
+    void setLimiterEnabled(bool enabled);
 
     std::vector<float> stats() const;
     std::string lastError() const;
@@ -92,6 +94,8 @@ private:
 
     std::atomic<float> inputPeakDb_{-80.0f};
     std::atomic<float> outputPeakDb_{-80.0f};
+    std::atomic<bool> clipDetected_{false};
+    int32_t clipHoldSamples_ = 0;
 
     std::atomic<int32_t> sampleRate_{0};
     std::atomic<int32_t> inputFramesPerBurst_{0};
@@ -117,5 +121,6 @@ private:
     bool xRunBaselineReady_ = false;
 
     EffectChain effectChain_;
+    OutputLimiter outputLimiter_;
     std::vector<float> inputBuffer_;
 };

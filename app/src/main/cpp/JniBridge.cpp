@@ -229,6 +229,18 @@ Java_jp_souta_guitarfx_AudioEngine_setDelayParameters(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setLimiterEnabled(
+        JNIEnv*,
+        jobject,
+        jboolean enabled
+) {
+    std::lock_guard<std::mutex> lock(engineMutex);
+    if (engine) {
+        engine->setLimiterEnabled(enabled == JNI_TRUE);
+    }
+}
+extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
@@ -246,7 +258,7 @@ Java_jp_souta_guitarfx_AudioEngine_getStats(
             engine
             ? engine->stats()
             : std::vector<float>(
-                    22,
+                    25,
                     0.0f
             );
 

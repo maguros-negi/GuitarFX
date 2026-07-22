@@ -8,6 +8,7 @@ add_library(guitarfx SHARED
     EffectChain.cpp
     NoiseGateEffect.cpp
     OverdriveEffect.cpp
+    OutputLimiter.cpp
     ThreeBandEqEffect.cpp
     NativeAudioEngine.cpp
     JniBridge.cpp
