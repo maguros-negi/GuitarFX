@@ -1,5 +1,6 @@
 package jp.souta.guitarfx
 
+import kotlin.time.Duration.Companion.milliseconds
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -85,7 +86,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
     LaunchedEffect(Unit) {
         while (true) {
             stats = engine.readStats()
-            delay(50)
+            delay(50.milliseconds)
         }
     }
 
@@ -93,7 +94,8 @@ private fun GuitarFxApp(engine: AudioEngine) {
         colorScheme = darkColorScheme(
             primary = Color(0xFF63E6BE),
             background = Color(0xFF101318),
-            surface = Color(0xFF1A1F26)
+            surface = Color(0xFF1A1F26),
+            error = Color(0xFFFF8A80)
         )
     ) {
         Surface(
@@ -124,14 +126,13 @@ private fun GuitarFxApp(engine: AudioEngine) {
                     )
                 }
 
-                StatusCard(
-                    stats = stats
-                )
+                StatusCard(stats)
 
                 MeterCard(
                     title = "INPUT",
                     peakDb = stats.inputPeakDb,
                     gainDb = inputGain,
+                    enabled = !bypassed,
                     onGainChanged = { value ->
                         inputGain = value
                         engine.setInputGainDb(value)
@@ -142,6 +143,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                     title = "OUTPUT",
                     peakDb = stats.outputPeakDb,
                     gainDb = outputGain,
+                    enabled = !bypassed,
                     onGainChanged = { value ->
                         outputGain = value
                         engine.setOutputGainDb(value)
@@ -191,7 +193,8 @@ private fun GuitarFxApp(engine: AudioEngine) {
                                 Color(0xFFE85D75)
                             } else {
                                 MaterialTheme.colorScheme.surface
-                            }
+                            },
+                        contentColor = Color.White
                     )
                 ) {
                     Text(
@@ -239,7 +242,7 @@ private fun GuitarFxApp(engine: AudioEngine) {
                 if (stats.error.isNotBlank()) {
                     Text(
                         text = stats.error,
-                        color = Color(0xFFFF8A80),
+                        color = MaterialTheme.colorScheme.error,
                         style =
                             MaterialTheme.typography.bodySmall
                     )
@@ -251,6 +254,34 @@ private fun GuitarFxApp(engine: AudioEngine) {
 
 @Composable
 private fun StatusCard(stats: AudioStats) {
+    val stateText = when (stats.state) {
+        AudioEngineState.RUNNING ->
+            "● RUNNING"
+
+        AudioEngineState.DISCONNECTED ->
+            "○ DISCONNECTED"
+
+        AudioEngineState.ERROR ->
+            "○ ERROR"
+
+        AudioEngineState.STOPPED ->
+            "○ STOPPED"
+    }
+
+    val stateColor = when (stats.state) {
+        AudioEngineState.RUNNING ->
+            Color(0xFF63E6BE)
+
+        AudioEngineState.DISCONNECTED ->
+            Color(0xFFFFB74D)
+
+        AudioEngineState.ERROR ->
+            Color(0xFFFF8A80)
+
+        AudioEngineState.STOPPED ->
+            Color.LightGray
+    }
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor =
@@ -265,41 +296,56 @@ private fun StatusCard(stats: AudioStats) {
                 Arrangement.spacedBy(5.dp)
         ) {
             Text(
+                text = stateText,
+                color = stateColor,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Sample Rate: ${stats.sampleRate} Hz"
+            )
+
+            Text(
                 text =
-                    if (stats.running) {
-                        "● RUNNING"
-                    } else {
-                        "○ STOPPED"
-                    },
+                    "Burst: IN ${stats.inputFramesPerBurst}" +
+                            " / OUT ${stats.outputFramesPerBurst}"
+            )
+
+            Text(
+                text =
+                    "Buffer Size: IN ${stats.inputBufferSize}" +
+                            " / OUT ${stats.outputBufferSize}"
+            )
+
+            Text(
+                text =
+                    "Buffer Capacity: " +
+                            "IN ${stats.inputBufferCapacity}" +
+                            " / OUT ${stats.outputBufferCapacity}"
+            )
+
+            Text(
+                text =
+                    "Channels: IN ${stats.inputChannels}" +
+                            " → OUT ${stats.outputChannels}"
+            )
+
+            Text(
+                text =
+                    "XRuns: IN ${stats.inputXruns}" +
+                            " / OUT ${stats.outputXruns}"
+            )
+
+            Text(
+                text =
+                    "Adaptive Buffer Adjustments: " +
+                            stats.bufferAdjustments,
                 color =
-                    if (stats.running) {
-                        Color(0xFF63E6BE)
+                    if (stats.bufferAdjustments > 0) {
+                        Color(0xFFFFB74D)
                     } else {
                         Color.LightGray
                     }
-            )
-
-            Text(
-                text =
-                    "${stats.sampleRate} Hz / " +
-                            "${stats.framesPerBurst} frames per burst"
-            )
-
-            Text(
-                text = "Buffer ${stats.bufferSize} frames"
-            )
-
-            Text(
-                text =
-                    "Input ${stats.inputChannels} ch" +
-                            "  →  " +
-                            "Output ${stats.outputChannels} ch"
-            )
-
-            Text(
-                text =
-                    "XRuns  IN ${stats.inputXruns}" +
-                            " / OUT ${stats.outputXruns}"
             )
 
             Text(
@@ -325,6 +371,7 @@ private fun MeterCard(
     title: String,
     peakDb: Float,
     gainDb: Float,
+    enabled: Boolean,
     onGainChanged: (Float) -> Unit
 ) {
     Card(
@@ -350,7 +397,7 @@ private fun MeterCard(
 
                 Text(
                     text =
-                        "${((peakDb * 10).roundToInt() / 10f)} dBFS"
+                        "${formatOneDecimal(peakDb)} dBFS"
                 )
             }
 
@@ -394,14 +441,31 @@ private fun MeterCard(
             Slider(
                 value = gainDb,
                 onValueChange = onGainChanged,
-                valueRange = -60f..12f
+                valueRange = -60f..12f,
+                enabled = enabled
             )
 
             Text(
                 text =
-                    "Gain " +
-                            "${((gainDb * 10).roundToInt() / 10f)} dB"
+                    if (enabled) {
+                        "Gain ${formatOneDecimal(gainDb)} dB"
+                    } else {
+                        "Gain ${formatOneDecimal(gainDb)} dB " +
+                                "(Bypassed)"
+                    },
+                color =
+                    if (enabled) {
+                        Color.Unspecified
+                    } else {
+                        Color.LightGray
+                    }
             )
         }
     }
+}
+
+private fun formatOneDecimal(value: Float): String {
+    return (
+            (value * 10f).roundToInt() / 10f
+            ).toString()
 }

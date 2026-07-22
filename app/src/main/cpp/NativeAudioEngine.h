@@ -12,10 +12,17 @@
 class NativeAudioEngine : public oboe::AudioStreamDataCallback,
                           public oboe::AudioStreamErrorCallback {
 public:
+    enum class EngineState : int32_t {
+        Stopped = 0,
+        Running = 1,
+        Disconnected = 2,
+        Error = 3
+    };
+
     bool start();
     void stop();
 
-    void processPendingEvents();
+    void processMaintenance();
 
     void setInputGainDb(float db);
     void setOutputGainDb(float db);
@@ -42,6 +49,10 @@ private:
 
     void closeStreamsLocked();
     void requestDisconnectHandling(oboe::Result error);
+    void monitorXRunsAndTuneBufferLocked();
+    void resetMonitoringLocked();
+    void updateStreamStatisticsLocked();
+
     void setError(const std::string& message);
 
     static float dbToLinear(float db);
@@ -54,6 +65,10 @@ private:
     mutable std::mutex errorMutex_;
 
     std::string error_;
+
+    std::atomic<EngineState> state_{
+            EngineState::Stopped
+    };
 
     std::atomic<bool> running_{false};
     std::atomic<bool> muted_{false};
@@ -71,10 +86,28 @@ private:
     std::atomic<float> inputPeakDb_{-80.0f};
     std::atomic<float> outputPeakDb_{-80.0f};
 
-    int32_t sampleRate_ = 0;
-    int32_t framesPerBurst_ = 0;
-    int32_t inputChannels_ = 0;
-    int32_t outputChannels_ = 0;
+    std::atomic<int32_t> sampleRate_{0};
+    std::atomic<int32_t> inputFramesPerBurst_{0};
+    std::atomic<int32_t> outputFramesPerBurst_{0};
+
+    std::atomic<int32_t> inputBufferCapacity_{0};
+    std::atomic<int32_t> outputBufferCapacity_{0};
+
+    std::atomic<int32_t> inputBufferSize_{0};
+    std::atomic<int32_t> outputBufferSize_{0};
+
+    std::atomic<int32_t> inputChannels_{0};
+    std::atomic<int32_t> outputChannels_{0};
+
+    std::atomic<int32_t> inputXRunCount_{0};
+    std::atomic<int32_t> outputXRunCount_{0};
+
+    std::atomic<int32_t> bufferAdjustmentCount_{0};
+
+    int32_t previousInputXRunCount_ = 0;
+    int32_t previousOutputXRunCount_ = 0;
+
+    bool xRunBaselineReady_ = false;
 
     std::vector<float> inputBuffer_;
 };

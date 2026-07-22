@@ -7,30 +7,70 @@ bool NativeAudioEngine::openInput() {
     oboe::AudioStreamBuilder builder;
 
     builder.setDirection(oboe::Direction::Input)
-            ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setSharingMode(oboe::SharingMode::Exclusive)
+            ->setPerformanceMode(
+                    oboe::PerformanceMode::LowLatency
+            )
+            ->setSharingMode(
+                    oboe::SharingMode::Exclusive
+            )
             ->setFormat(oboe::AudioFormat::Float)
             ->setChannelCount(1)
-            ->setInputPreset(oboe::InputPreset::Generic);
+            ->setInputPreset(
+                    oboe::InputPreset::Generic
+            )
+            ->setErrorCallback(this);
 
     auto result = builder.openStream(inputStream_);
 
     if (result != oboe::Result::OK) {
-        builder.setSharingMode(oboe::SharingMode::Shared);
+        builder.setSharingMode(
+                oboe::SharingMode::Shared
+        );
+
         result = builder.openStream(inputStream_);
     }
 
-    if (result != oboe::Result::OK || !inputStream_) {
+    if (
+            result != oboe::Result::OK ||
+            !inputStream_
+            ) {
         setError(
                 std::string("Input open failed: ") +
                 oboe::convertToText(result)
         );
+
+        state_.store(
+                EngineState::Error,
+                std::memory_order_release
+        );
+
         return false;
     }
 
-    sampleRate_ = inputStream_->getSampleRate();
-    framesPerBurst_ = inputStream_->getFramesPerBurst();
-    inputChannels_ = inputStream_->getChannelCount();
+    sampleRate_.store(
+            inputStream_->getSampleRate(),
+            std::memory_order_relaxed
+    );
+
+    inputFramesPerBurst_.store(
+            inputStream_->getFramesPerBurst(),
+            std::memory_order_relaxed
+    );
+
+    inputChannels_.store(
+            inputStream_->getChannelCount(),
+            std::memory_order_relaxed
+    );
+
+    inputBufferCapacity_.store(
+            inputStream_->getBufferCapacityInFrames(),
+            std::memory_order_relaxed
+    );
+
+    inputBufferSize_.store(
+            inputStream_->getBufferSizeInFrames(),
+            std::memory_order_relaxed
+    );
 
     return true;
 }
@@ -39,10 +79,18 @@ bool NativeAudioEngine::openOutput() {
     oboe::AudioStreamBuilder builder;
 
     builder.setDirection(oboe::Direction::Output)
-            ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setSharingMode(oboe::SharingMode::Exclusive)
+            ->setPerformanceMode(
+                    oboe::PerformanceMode::LowLatency
+            )
+            ->setSharingMode(
+                    oboe::SharingMode::Exclusive
+            )
             ->setFormat(oboe::AudioFormat::Float)
-            ->setSampleRate(sampleRate_)
+            ->setSampleRate(
+                    sampleRate_.load(
+                            std::memory_order_relaxed
+                    )
+            )
             ->setChannelCount(2)
             ->setUsage(oboe::Usage::Game)
             ->setDataCallback(this)
@@ -51,50 +99,115 @@ bool NativeAudioEngine::openOutput() {
     auto result = builder.openStream(outputStream_);
 
     if (result != oboe::Result::OK) {
-        builder.setSharingMode(oboe::SharingMode::Shared);
+        builder.setSharingMode(
+                oboe::SharingMode::Shared
+        );
+
         result = builder.openStream(outputStream_);
     }
 
-    if (result != oboe::Result::OK || !outputStream_) {
+    if (
+            result != oboe::Result::OK ||
+            !outputStream_
+            ) {
         setError(
                 std::string("Output open failed: ") +
                 oboe::convertToText(result)
         );
+
+        state_.store(
+                EngineState::Error,
+                std::memory_order_release
+        );
+
         return false;
     }
 
-    outputChannels_ = outputStream_->getChannelCount();
-
-    framesPerBurst_ = std::max(
-            framesPerBurst_,
-            outputStream_->getFramesPerBurst()
+    outputFramesPerBurst_.store(
+            outputStream_->getFramesPerBurst(),
+            std::memory_order_relaxed
     );
 
-    const int32_t capacity = std::max(
-            4096,
-            framesPerBurst_ * 8
+    outputChannels_.store(
+            outputStream_->getChannelCount(),
+            std::memory_order_relaxed
     );
+
+    outputBufferCapacity_.store(
+            outputStream_->getBufferCapacityInFrames(),
+            std::memory_order_relaxed
+    );
+
+    const int32_t inputBurst =
+            inputFramesPerBurst_.load(
+                    std::memory_order_relaxed
+            );
+
+    const int32_t outputBurst =
+            outputFramesPerBurst_.load(
+                    std::memory_order_relaxed
+            );
+
+    const int32_t largestBurst =
+            std::max(inputBurst, outputBurst);
+
+    const int32_t capacity =
+            std::max(4096, largestBurst * 8);
+
+    const int32_t channelCount =
+            std::max(
+                    1,
+                    inputChannels_.load(
+                            std::memory_order_relaxed
+                    )
+            );
 
     inputBuffer_.assign(
-            capacity * std::max(1, inputChannels_),
+            capacity * channelCount,
             0.0f
     );
 
-    outputStream_->setBufferSizeInFrames(
-            outputStream_->getFramesPerBurst() * 2
-    );
+    const int32_t initialBufferRequest =
+            std::max(
+                    1,
+                    outputStream_->getFramesPerBurst() * 2
+            );
+
+    const auto bufferResult =
+            outputStream_->setBufferSizeInFrames(
+                    initialBufferRequest
+            );
+
+    if (bufferResult) {
+        outputBufferSize_.store(
+                bufferResult.value(),
+                std::memory_order_relaxed
+        );
+    } else {
+        outputBufferSize_.store(
+                outputStream_->getBufferSizeInFrames(),
+                std::memory_order_relaxed
+        );
+    }
 
     return true;
 }
 
 bool NativeAudioEngine::start() {
-    std::lock_guard<std::mutex> lock(lifecycleMutex_);
+    std::lock_guard<std::mutex> lock(
+            lifecycleMutex_
+    );
 
-    if (running_.load(std::memory_order_acquire)) {
+    if (
+            running_.load(
+                    std::memory_order_acquire
+            )
+            ) {
         return true;
     }
 
     closeStreamsLocked();
+    resetMonitoringLocked();
 
     pendingAudioError_.store(
             0,
@@ -102,6 +215,11 @@ bool NativeAudioEngine::start() {
     );
 
     setError("");
+
+    state_.store(
+            EngineState::Stopped,
+            std::memory_order_release
+    );
 
     if (!openInput()) {
         closeStreamsLocked();
@@ -114,13 +232,19 @@ bool NativeAudioEngine::start() {
     }
 
     inputCurrent_ =
-            inputTarget_.load(std::memory_order_relaxed);
+            inputTarget_.load(
+                    std::memory_order_relaxed
+            );
 
     outputCurrent_ =
-            outputTarget_.load(std::memory_order_relaxed);
+            outputTarget_.load(
+                    std::memory_order_relaxed
+            );
 
     bypassMix_ =
-            bypassTarget_.load(std::memory_order_relaxed)
+            bypassTarget_.load(
+                    std::memory_order_relaxed
+            )
             ? 1.0f
             : 0.0f;
 
@@ -134,34 +258,59 @@ bool NativeAudioEngine::start() {
             std::memory_order_relaxed
     );
 
-    auto inputStartResult =
+    const auto inputStartResult =
             inputStream_->requestStart();
 
-    if (inputStartResult != oboe::Result::OK) {
+    if (
+            inputStartResult != oboe::Result::OK
+            ) {
         setError(
                 std::string("Input start failed: ") +
-                oboe::convertToText(inputStartResult)
+                oboe::convertToText(
+                        inputStartResult
+                )
+        );
+
+        state_.store(
+                EngineState::Error,
+                std::memory_order_release
         );
 
         closeStreamsLocked();
         return false;
     }
 
-    auto outputStartResult =
+    const auto outputStartResult =
             outputStream_->requestStart();
 
-    if (outputStartResult != oboe::Result::OK) {
+    if (
+            outputStartResult != oboe::Result::OK
+            ) {
         setError(
                 std::string("Output start failed: ") +
-                oboe::convertToText(outputStartResult)
+                oboe::convertToText(
+                        outputStartResult
+                )
+        );
+
+        state_.store(
+                EngineState::Error,
+                std::memory_order_release
         );
 
         closeStreamsLocked();
         return false;
     }
+
+    updateStreamStatisticsLocked();
 
     running_.store(
             true,
+            std::memory_order_release
+    );
+
+    state_.store(
+            EngineState::Running,
             std::memory_order_release
     );
 
@@ -169,7 +318,9 @@ bool NativeAudioEngine::start() {
 }
 
 void NativeAudioEngine::stop() {
-    std::lock_guard<std::mutex> lock(lifecycleMutex_);
+    std::lock_guard<std::mutex> lock(
+            lifecycleMutex_
+    );
 
     running_.store(
             false,
@@ -182,6 +333,7 @@ void NativeAudioEngine::stop() {
     );
 
     closeStreamsLocked();
+    resetMonitoringLocked();
 
     inputPeakDb_.store(
             -80.0f,
@@ -191,6 +343,11 @@ void NativeAudioEngine::stop() {
     outputPeakDb_.store(
             -80.0f,
             std::memory_order_relaxed
+    );
+
+    state_.store(
+            EngineState::Stopped,
+            std::memory_order_release
     );
 }
 
@@ -206,12 +363,45 @@ void NativeAudioEngine::closeStreamsLocked() {
         inputStream_->close();
         inputStream_.reset();
     }
+
+    inputBufferSize_.store(
+            0,
+            std::memory_order_relaxed
+    );
+
+    outputBufferSize_.store(
+            0,
+            std::memory_order_relaxed
+    );
+}
+
+void NativeAudioEngine::resetMonitoringLocked() {
+    previousInputXRunCount_ = 0;
+    previousOutputXRunCount_ = 0;
+
+    inputXRunCount_.store(
+            0,
+            std::memory_order_relaxed
+    );
+
+    outputXRunCount_.store(
+            0,
+            std::memory_order_relaxed
+    );
+
+    bufferAdjustmentCount_.store(
+            0,
+            std::memory_order_relaxed
+    );
+
+    xRunBaselineReady_ = false;
 }
 
 void NativeAudioEngine::requestDisconnectHandling(
         oboe::Result error
 ) {
-    int32_t errorCode = static_cast<int32_t>(error);
+    int32_t errorCode =
+            static_cast<int32_t>(error);
 
     if (errorCode == 0) {
         errorCode = static_cast<int32_t>(
@@ -232,52 +422,248 @@ void NativeAudioEngine::requestDisconnectHandling(
             false,
             std::memory_order_release
     );
+
+    state_.store(
+            EngineState::Disconnected,
+            std::memory_order_release
+    );
 }
 
-void NativeAudioEngine::processPendingEvents() {
-    const int32_t errorCode =
+void NativeAudioEngine::processMaintenance() {
+    const int32_t pendingError =
             pendingAudioError_.exchange(
                     0,
                     std::memory_order_acq_rel
             );
 
-    if (errorCode == 0) {
+    if (pendingError != 0) {
+        const auto error =
+                static_cast<oboe::Result>(
+                        pendingError
+                );
+
+        {
+            std::lock_guard<std::mutex> lock(
+                    lifecycleMutex_
+            );
+
+            running_.store(
+                    false,
+                    std::memory_order_release
+            );
+
+            closeStreamsLocked();
+
+            inputPeakDb_.store(
+                    -80.0f,
+                    std::memory_order_relaxed
+            );
+
+            outputPeakDb_.store(
+                    -80.0f,
+                    std::memory_order_relaxed
+            );
+
+            state_.store(
+                    EngineState::Disconnected,
+                    std::memory_order_release
+            );
+        }
+
+        setError(
+                std::string(
+                        "Audio device disconnected. "
+                        "Reconnect the device and press START: "
+                ) +
+                oboe::convertToText(error)
+        );
+
         return;
     }
 
-    const auto error =
-            static_cast<oboe::Result>(errorCode);
-
-    {
-        std::lock_guard<std::mutex> lock(
-                lifecycleMutex_
-        );
-
-        running_.store(
-                false,
-                std::memory_order_release
-        );
-
-        closeStreamsLocked();
-
-        inputPeakDb_.store(
-                -80.0f,
-                std::memory_order_relaxed
-        );
-
-        outputPeakDb_.store(
-                -80.0f,
-                std::memory_order_relaxed
-        );
+    if (
+            !running_.load(
+                    std::memory_order_acquire
+            )
+            ) {
+        return;
     }
 
-    setError(
-            std::string(
-                    "Audio device disconnected. "
-                    "Reconnect the device and press START: "
-            ) +
-            oboe::convertToText(error)
+    std::lock_guard<std::mutex> lock(
+            lifecycleMutex_
     );
+
+    if (
+            !running_.load(
+                    std::memory_order_acquire
+            ) ||
+            !inputStream_ ||
+            !outputStream_
+            ) {
+        return;
+    }
+
+    updateStreamStatisticsLocked();
+    monitorXRunsAndTuneBufferLocked();
+    updateStreamStatisticsLocked();
+}
+
+void NativeAudioEngine::updateStreamStatisticsLocked() {
+    if (inputStream_) {
+        inputFramesPerBurst_.store(
+                inputStream_->getFramesPerBurst(),
+                std::memory_order_relaxed
+        );
+
+        inputBufferCapacity_.store(
+                inputStream_
+                        ->getBufferCapacityInFrames(),
+                std::memory_order_relaxed
+        );
+
+        inputBufferSize_.store(
+                inputStream_->getBufferSizeInFrames(),
+                std::memory_order_relaxed
+        );
+
+        const auto inputXRunResult =
+                inputStream_->getXRunCount();
+
+        if (inputXRunResult) {
+            inputXRunCount_.store(
+                    inputXRunResult.value(),
+                    std::memory_order_relaxed
+            );
+        }
+    }
+
+    if (outputStream_) {
+        outputFramesPerBurst_.store(
+                outputStream_->getFramesPerBurst(),
+                std::memory_order_relaxed
+        );
+
+        outputBufferCapacity_.store(
+                outputStream_
+                        ->getBufferCapacityInFrames(),
+                std::memory_order_relaxed
+        );
+
+        outputBufferSize_.store(
+                outputStream_
+                        ->getBufferSizeInFrames(),
+                std::memory_order_relaxed
+        );
+
+        const auto outputXRunResult =
+                outputStream_->getXRunCount();
+
+        if (outputXRunResult) {
+            outputXRunCount_.store(
+                    outputXRunResult.value(),
+                    std::memory_order_relaxed
+            );
+        }
+    }
+}
+
+void NativeAudioEngine::monitorXRunsAndTuneBufferLocked() {
+    if (!outputStream_) {
+        return;
+    }
+
+    const int32_t currentInputXRuns =
+            inputXRunCount_.load(
+                    std::memory_order_relaxed
+            );
+
+    const int32_t currentOutputXRuns =
+            outputXRunCount_.load(
+                    std::memory_order_relaxed
+            );
+
+    if (!xRunBaselineReady_) {
+        previousInputXRunCount_ =
+                currentInputXRuns;
+
+        previousOutputXRunCount_ =
+                currentOutputXRuns;
+
+        xRunBaselineReady_ = true;
+        return;
+    }
+
+    const bool inputXRunIncreased =
+            currentInputXRuns >
+            previousInputXRunCount_;
+
+    const bool outputXRunIncreased =
+            currentOutputXRuns >
+            previousOutputXRunCount_;
+
+    previousInputXRunCount_ =
+            currentInputXRuns;
+
+    previousOutputXRunCount_ =
+            currentOutputXRuns;
+
+    if (
+            !inputXRunIncreased &&
+            !outputXRunIncreased
+            ) {
+        return;
+    }
+
+    const int32_t currentBufferSize =
+            outputStream_->getBufferSizeInFrames();
+
+    const int32_t outputBurst =
+            std::max(
+                    1,
+                    outputStream_->getFramesPerBurst()
+            );
+
+    const int32_t bufferCapacity =
+            outputStream_
+                    ->getBufferCapacityInFrames();
+
+    if (
+            bufferCapacity <= 0 ||
+            currentBufferSize >= bufferCapacity
+            ) {
+        return;
+    }
+
+    const int32_t requestedBufferSize =
+            std::min(
+                    bufferCapacity,
+                    currentBufferSize + outputBurst
+            );
+
+    const auto result =
+            outputStream_->setBufferSizeInFrames(
+                    requestedBufferSize
+            );
+
+    if (result) {
+        const int32_t appliedBufferSize =
+                result.value();
+
+        outputBufferSize_.store(
+                appliedBufferSize,
+                std::memory_order_relaxed
+        );
+
+        if (
+                appliedBufferSize >
+                currentBufferSize
+                ) {
+            bufferAdjustmentCount_.fetch_add(
+                    1,
+                    std::memory_order_relaxed
+            );
+        }
+    }
 }
 
 oboe::DataCallbackResult
@@ -289,17 +675,31 @@ NativeAudioEngine::onAudioReady(
     auto* output =
             static_cast<float*>(audioData);
 
+    const int32_t outputChannelCount =
+            outputChannels_.load(
+                    std::memory_order_relaxed
+            );
+
+    const int32_t inputChannelCount =
+            inputChannels_.load(
+                    std::memory_order_relaxed
+            );
+
     if (
             pendingAudioError_.load(
                     std::memory_order_acquire
             ) != 0
             ) {
-        if (output != nullptr &&
-            numFrames > 0 &&
-            outputChannels_ > 0) {
+        if (
+                output != nullptr &&
+                numFrames > 0 &&
+                outputChannelCount > 0
+                ) {
             std::fill(
                     output,
-                    output + numFrames * outputChannels_,
+                    output +
+                    numFrames *
+                    outputChannelCount,
                     0.0f
             );
         }
@@ -311,15 +711,21 @@ NativeAudioEngine::onAudioReady(
             !inputStream_ ||
             output == nullptr ||
             numFrames <= 0 ||
-            outputChannels_ <= 0 ||
-            inputChannels_ <= 0
+            outputChannelCount <= 0 ||
+            inputChannelCount <= 0
             ) {
-        if (output != nullptr && numFrames > 0) {
+        if (
+                output != nullptr &&
+                numFrames > 0
+                ) {
             std::fill(
                     output,
                     output +
                     numFrames *
-                    std::max(1, outputChannels_),
+                    std::max(
+                            1,
+                            outputChannelCount
+                    ),
                     0.0f
             );
         }
@@ -328,26 +734,31 @@ NativeAudioEngine::onAudioReady(
     }
 
     const int32_t samplesNeeded =
-            numFrames * inputChannels_;
+            numFrames * inputChannelCount;
 
     if (
             samplesNeeded >
-            static_cast<int32_t>(inputBuffer_.size())
+            static_cast<int32_t>(
+                    inputBuffer_.size()
+            )
             ) {
         std::fill(
                 output,
-                output + numFrames * outputChannels_,
+                output +
+                numFrames *
+                outputChannelCount,
                 0.0f
         );
 
         return oboe::DataCallbackResult::Continue;
     }
 
-    auto readResult = inputStream_->read(
-            inputBuffer_.data(),
-            numFrames,
-            0
-    );
+    const auto readResult =
+            inputStream_->read(
+                    inputBuffer_.data(),
+                    numFrames,
+                    0
+            );
 
     if (!readResult) {
         requestDisconnectHandling(
@@ -356,7 +767,9 @@ NativeAudioEngine::onAudioReady(
 
         std::fill(
                 output,
-                output + numFrames * outputChannels_,
+                output +
+                numFrames *
+                outputChannelCount,
                 0.0f
         );
 
@@ -370,7 +783,9 @@ NativeAudioEngine::onAudioReady(
     }
 
     const bool isMuted =
-            muted_.load(std::memory_order_relaxed);
+            muted_.load(
+                    std::memory_order_relaxed
+            );
 
     const float inputTarget =
             inputTarget_.load(
@@ -391,7 +806,12 @@ NativeAudioEngine::onAudioReady(
 
     const float validSampleRate =
             static_cast<float>(
-                    std::max(1, sampleRate_)
+                    std::max(
+                            1,
+                            sampleRate_.load(
+                                    std::memory_order_relaxed
+                            )
+                    )
             );
 
     const float smoothing =
@@ -426,7 +846,7 @@ NativeAudioEngine::onAudioReady(
         if (frame < framesRead) {
             input =
                     inputBuffer_[
-                            frame * inputChannels_
+                            frame * inputChannelCount
                     ];
         }
 
@@ -443,8 +863,10 @@ NativeAudioEngine::onAudioReady(
         const float bypassSignal = input;
 
         float processed =
-                normalSignal * (1.0f - bypassMix_) +
-                bypassSignal * bypassMix_;
+                normalSignal *
+                (1.0f - bypassMix_) +
+                bypassSignal *
+                bypassMix_;
 
         if (isMuted) {
             processed = 0.0f;
@@ -457,11 +879,13 @@ NativeAudioEngine::onAudioReady(
 
         for (
                 int32_t channel = 0;
-                channel < outputChannels_;
+                channel < outputChannelCount;
                 ++channel
                 ) {
             output[
-                    frame * outputChannels_ + channel
+                    frame *
+                    outputChannelCount +
+                    channel
             ] = processed;
         }
     }
@@ -491,7 +915,11 @@ void NativeAudioEngine::setInputGainDb(
 ) {
     inputTarget_.store(
             dbToLinear(
-                    std::clamp(db, -60.0f, 12.0f)
+                    std::clamp(
+                            db,
+                            -60.0f,
+                            12.0f
+                    )
             ),
             std::memory_order_relaxed
     );
@@ -502,7 +930,11 @@ void NativeAudioEngine::setOutputGainDb(
 ) {
     outputTarget_.store(
             dbToLinear(
-                    std::clamp(db, -60.0f, 12.0f)
+                    std::clamp(
+                            db,
+                            -60.0f,
+                            12.0f
+                    )
             ),
             std::memory_order_relaxed
     );
@@ -528,62 +960,110 @@ void NativeAudioEngine::setBypassed(
 
 std::vector<float>
 NativeAudioEngine::stats() const {
-    float inputXrun = 0.0f;
-    float outputXrun = 0.0f;
-    float bufferSize = 0.0f;
-
-    if (inputStream_) {
-        auto value =
-                inputStream_->getXRunCount();
-
-        if (value) {
-            inputXrun =
-                    static_cast<float>(
-                            value.value()
-                    );
-        }
-    }
-
-    if (outputStream_) {
-        auto value =
-                outputStream_->getXRunCount();
-
-        if (value) {
-            outputXrun =
-                    static_cast<float>(
-                            value.value()
-                    );
-        }
-
-        bufferSize =
-                static_cast<float>(
-                        outputStream_
-                                ->getBufferSizeInFrames()
-                );
-    }
-
     return {
-            running_.load(std::memory_order_acquire)
+            running_.load(
+                    std::memory_order_acquire
+            )
             ? 1.0f
             : 0.0f,
-            static_cast<float>(sampleRate_),
-            static_cast<float>(framesPerBurst_),
-            bufferSize,
-            static_cast<float>(inputChannels_),
-            static_cast<float>(outputChannels_),
+
+            static_cast<float>(
+                    state_.load(
+                            std::memory_order_acquire
+                    )
+            ),
+
+            static_cast<float>(
+                    sampleRate_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    inputFramesPerBurst_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    outputFramesPerBurst_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    inputBufferCapacity_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    outputBufferCapacity_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    inputBufferSize_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    outputBufferSize_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    inputChannels_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    outputChannels_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
             inputPeakDb_.load(
                     std::memory_order_relaxed
             ),
+
             outputPeakDb_.load(
                     std::memory_order_relaxed
             ),
-            inputXrun,
-            outputXrun,
+
+            static_cast<float>(
+                    inputXRunCount_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
+            static_cast<float>(
+                    outputXRunCount_.load(
+                            std::memory_order_relaxed
+                    )
+            ),
+
             bypassTarget_.load(
                     std::memory_order_relaxed
             )
             ? 1.0f
-            : 0.0f
+            : 0.0f,
+
+            muted_.load(
+                    std::memory_order_relaxed
+            )
+            ? 1.0f
+            : 0.0f,
+
+            static_cast<float>(
+                    bufferAdjustmentCount_.load(
+                            std::memory_order_relaxed
+                    )
+            )
     };
 }
 

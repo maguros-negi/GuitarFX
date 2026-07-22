@@ -159,14 +159,14 @@ Java_jp_souta_guitarfx_AudioEngine_getStats(
     );
 
     if (engine) {
-        engine->processPendingEvents();
+        engine->processMaintenance();
     }
 
     const auto values =
             engine
             ? engine->stats()
             : std::vector<float>(
-                    11,
+                    18,
                     0.0f
             );
 
