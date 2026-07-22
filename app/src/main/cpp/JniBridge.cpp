@@ -149,6 +149,26 @@ Java_jp_souta_guitarfx_AudioEngine_setBypassed(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_jp_souta_guitarfx_AudioEngine_setEffectEnabled(
+        JNIEnv*,
+        jobject,
+        jint effectId,
+        jboolean enabled
+) {
+    std::lock_guard<std::mutex> lock(
+            engineMutex
+    );
+
+    if (engine) {
+        engine->setEffectEnabled(
+                static_cast<int32_t>(effectId),
+                enabled == JNI_TRUE
+        );
+    }
+}
+
+extern "C"
 JNIEXPORT jfloatArray JNICALL
 Java_jp_souta_guitarfx_AudioEngine_getStats(
         JNIEnv* env,
@@ -166,7 +186,7 @@ Java_jp_souta_guitarfx_AudioEngine_getStats(
             engine
             ? engine->stats()
             : std::vector<float>(
-                    18,
+                    22,
                     0.0f
             );
 

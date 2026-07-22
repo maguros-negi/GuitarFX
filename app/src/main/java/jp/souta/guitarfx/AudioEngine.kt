@@ -48,6 +48,11 @@ data class AudioStats(
 
     val bufferAdjustments: Int = 0,
 
+    val gateEnabled: Boolean = false,
+    val driveEnabled: Boolean = false,
+    val eqEnabled: Boolean = false,
+    val delayEnabled: Boolean = false,
+
     val error: String = ""
 )
 
@@ -67,6 +72,7 @@ class AudioEngine {
     external fun setOutputGainDb(value: Float)
     external fun setMuted(value: Boolean)
     external fun setBypassed(value: Boolean)
+    external fun setEffectEnabled(effectId: Int, enabled: Boolean)
 
     external fun getStats(): FloatArray
     external fun getLastError(): String
@@ -74,7 +80,7 @@ class AudioEngine {
     fun readStats(): AudioStats {
         val values = getStats()
 
-        if (values.size < 18) {
+        if (values.size < 22) {
             return AudioStats(
                 state = AudioEngineState.ERROR,
                 error = "Native stats format error"
@@ -102,6 +108,10 @@ class AudioEngine {
             bypassed = values[15] > 0.5f,
             muted = values[16] > 0.5f,
             bufferAdjustments = values[17].toInt(),
+            gateEnabled = values[18] > 0.5f,
+            driveEnabled = values[19] > 0.5f,
+            eqEnabled = values[20] > 0.5f,
+            delayEnabled = values[21] > 0.5f,
             error = getLastError()
         )
     }

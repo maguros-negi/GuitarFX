@@ -2,6 +2,8 @@
 
 #include <oboe/Oboe.h>
 
+#include "EffectChain.h"
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -28,6 +30,7 @@ public:
     void setOutputGainDb(float db);
     void setMuted(bool muted);
     void setBypassed(bool bypassed);
+    void setEffectEnabled(int32_t effectId, bool enabled);
 
     std::vector<float> stats() const;
     std::string lastError() const;
@@ -109,5 +112,6 @@ private:
 
     bool xRunBaselineReady_ = false;
 
+    EffectChain effectChain_;
     std::vector<float> inputBuffer_;
 };

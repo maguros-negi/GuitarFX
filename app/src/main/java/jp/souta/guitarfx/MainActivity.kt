@@ -95,30 +95,35 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class EffectType(
+    val nativeId: Int,
     val shortName: String,
     val fullName: String,
     val description: String,
     val accentColor: Color
 ) {
     GATE(
+        nativeId = 0,
         shortName = "GATE",
         fullName = "NOISE GATE",
         description = "小さい入力音やノイズを抑えるエフェクトです。",
         accentColor = Color(0xFF66D17A)
     ),
     DRIVE(
+        nativeId = 1,
         shortName = "DRIVE",
         fullName = "OVERDRIVE",
         description = "ギターサウンドへ歪みと音圧を加えるエフェクトです。",
         accentColor = Color(0xFFFF984F)
     ),
     EQ(
+        nativeId = 2,
         shortName = "EQ",
         fullName = "3 BAND EQ",
         description = "低域・中域・高域のバランスを調整するエフェクトです。",
         accentColor = Color(0xFF55B8FF)
     ),
     DELAY(
+        nativeId = 3,
         shortName = "DELAY",
         fullName = "DIGITAL DELAY",
         description = "入力音を遅らせて繰り返し再生するエフェクトです。",
@@ -222,13 +227,23 @@ private fun GuitarFxApp(engine: AudioEngine) {
 
                 EffectChainPanel(
                     selectedEffect = selectedEffect,
+                    stats = stats,
+                    masterBypassed = bypassed,
                     onEffectSelected = { effect ->
                         selectedEffect = effect
                     }
                 )
 
                 SelectedEffectPanel(
-                    selectedEffect = selectedEffect
+                    selectedEffect = selectedEffect,
+                    enabled = isEffectEnabled(stats, selectedEffect),
+                    masterBypassed = bypassed,
+                    onEnabledChange = { enabled ->
+                        engine.setEffectEnabled(
+                            selectedEffect.nativeId,
+                            enabled
+                        )
+                    }
                 )
 
                 SectionLabel(
@@ -343,7 +358,7 @@ private fun AppHeader(stats: AudioStats) {
             )
 
             Text(
-                text = "v0.2 UI PREVIEW",
+                text = "v0.2 EFFECT CHAIN",
                 color = MutedText,
                 fontSize = 9.sp,
                 letterSpacing = 1.sp
@@ -547,6 +562,8 @@ private fun SectionLabel(
 @Composable
 private fun EffectChainPanel(
     selectedEffect: EffectType,
+    stats: AudioStats,
+    masterBypassed: Boolean,
     onEffectSelected: (EffectType) -> Unit
 ) {
     Card(
@@ -578,6 +595,8 @@ private fun EffectChainPanel(
                 EffectBlock(
                     effect = effect,
                     selected = selectedEffect == effect,
+                    enabled = isEffectEnabled(stats, effect),
+                    masterBypassed = masterBypassed,
                     onClick = {
                         onEffectSelected(effect)
                     }
@@ -653,6 +672,8 @@ private fun SignalCable() {
 private fun EffectBlock(
     effect: EffectType,
     selected: Boolean,
+    enabled: Boolean,
+    masterBypassed: Boolean,
     onClick: () -> Unit
 ) {
     val borderColor = if (selected) {
@@ -692,7 +713,11 @@ private fun EffectBlock(
                 modifier = Modifier
                     .size(9.dp)
                     .background(
-                        color = MutedText.copy(alpha = 0.5f),
+                        color = when {
+                            masterBypassed -> WarningOrange.copy(alpha = 0.45f)
+                            enabled -> effect.accentColor
+                            else -> MutedText.copy(alpha = 0.5f)
+                        },
                         shape = CircleShape
                     )
             )
@@ -710,8 +735,16 @@ private fun EffectBlock(
             )
 
             Text(
-                text = "OFF",
-                color = MutedText,
+                text = when {
+                    masterBypassed && enabled -> "BYPASS"
+                    enabled -> "ON"
+                    else -> "OFF"
+                },
+                color = when {
+                    masterBypassed && enabled -> WarningOrange
+                    enabled -> effect.accentColor
+                    else -> MutedText
+                },
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -721,7 +754,10 @@ private fun EffectBlock(
 
 @Composable
 private fun SelectedEffectPanel(
-    selectedEffect: EffectType
+    selectedEffect: EffectType,
+    enabled: Boolean,
+    masterBypassed: Boolean,
+    onEnabledChange: (Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -752,11 +788,7 @@ private fun SelectedEffectPanel(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp
                     )
-
-                    Spacer(
-                        modifier = Modifier.height(4.dp)
-                    )
-
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = selectedEffect.fullName,
                         color = selectedEffect.accentColor,
@@ -765,31 +797,39 @@ private fun SelectedEffectPanel(
                     )
                 }
 
-                Surface(
-                    color = selectedEffect.accentColor.copy(alpha = 0.12f),
+                OutlinedButton(
+                    onClick = { onEnabledChange(!enabled) },
                     shape = RoundedCornerShape(50),
                     border = BorderStroke(
-                        width = 1.dp,
-                        color = selectedEffect.accentColor.copy(alpha = 0.5f)
+                        width = if (enabled) 2.dp else 1.dp,
+                        color = if (enabled) {
+                            selectedEffect.accentColor
+                        } else {
+                            PanelBorder
+                        }
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (enabled) {
+                            selectedEffect.accentColor.copy(alpha = 0.16f)
+                        } else {
+                            PanelBackground
+                        },
+                        contentColor = if (enabled) {
+                            selectedEffect.accentColor
+                        } else {
+                            MutedText
+                        }
                     )
                 ) {
                     Text(
-                        text = "COMING SOON",
-                        modifier = Modifier.padding(
-                            horizontal = 9.dp,
-                            vertical = 5.dp
-                        ),
-                        color = selectedEffect.accentColor,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        text = if (enabled) "EFFECT ON" else "EFFECT OFF",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black
                     )
                 }
             }
 
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = selectedEffect.description,
@@ -797,9 +837,17 @@ private fun SelectedEffectPanel(
                 fontSize = 12.sp
             )
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
+            if (masterBypassed && enabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "MASTER BYPASSにより現在は迂回中です。",
+                    color = WarningOrange,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -809,17 +857,27 @@ private fun SelectedEffectPanel(
                     label = firstParameterName(selectedEffect),
                     modifier = Modifier.weight(1f)
                 )
-
                 ParameterPlaceholder(
                     label = secondParameterName(selectedEffect),
                     modifier = Modifier.weight(1f)
                 )
-
                 ParameterPlaceholder(
                     label = thirdParameterName(selectedEffect),
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "DSP PARAMETERS COMING NEXT",
+                modifier = Modifier.fillMaxWidth(),
+                color = MutedText,
+                textAlign = TextAlign.Center,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
         }
     }
 }
@@ -863,6 +921,18 @@ private fun ParameterPlaceholder(
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
+    }
+}
+
+private fun isEffectEnabled(
+    stats: AudioStats,
+    effect: EffectType
+): Boolean {
+    return when (effect) {
+        EffectType.GATE -> stats.gateEnabled
+        EffectType.DRIVE -> stats.driveEnabled
+        EffectType.EQ -> stats.eqEnabled
+        EffectType.DELAY -> stats.delayEnabled
     }
 }
 
@@ -1380,6 +1450,13 @@ private fun DiagnosticsPanel(
                     warning = stats.bufferAdjustments > 0
                 )
 
+                DiagnosticRow(
+                    label = "Effects",
+                    value = "G ${if (stats.gateEnabled) 1 else 0} / " +
+                            "D ${if (stats.driveEnabled) 1 else 0} / " +
+                            "E ${if (stats.eqEnabled) 1 else 0} / " +
+                            "DL ${if (stats.delayEnabled) 1 else 0}"
+                )
                 DiagnosticRow(
                     label = "Master Bypass",
                     value = if (stats.bypassed) {

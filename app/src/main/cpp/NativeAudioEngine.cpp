@@ -167,6 +167,13 @@ bool NativeAudioEngine::openOutput() {
             0.0f
     );
 
+    effectChain_.prepare(
+            static_cast<double>(
+                    sampleRate_.load(std::memory_order_relaxed)
+            ),
+            largestBurst
+    );
+
     const int32_t initialBufferRequest =
             std::max(
                     1,
@@ -855,10 +862,12 @@ NativeAudioEngine::onAudioReady(
                 std::abs(input)
         );
 
+        const float preEffectSignal =
+                input * inputCurrent_;
+        const float effectSignal =
+                effectChain_.processSample(preEffectSignal);
         const float normalSignal =
-                input *
-                inputCurrent_ *
-                outputCurrent_;
+                effectSignal * outputCurrent_;
 
         const float bypassSignal = input;
 
@@ -955,6 +964,22 @@ void NativeAudioEngine::setBypassed(
     bypassTarget_.store(
             value,
             std::memory_order_relaxed
+    );
+}
+void NativeAudioEngine::setEffectEnabled(
+        int32_t effectId,
+        bool enabled
+) {
+    if (
+            effectId < 0 ||
+            effectId >= static_cast<int32_t>(EffectId::Count)
+            ) {
+        return;
+    }
+
+    effectChain_.setEffectEnabled(
+            static_cast<EffectId>(effectId),
+            enabled
     );
 }
 
@@ -1063,7 +1088,11 @@ NativeAudioEngine::stats() const {
                     bufferAdjustmentCount_.load(
                             std::memory_order_relaxed
                     )
-            )
+            ),
+            effectChain_.isEffectEnabled(EffectId::Gate) ? 1.0f : 0.0f,
+            effectChain_.isEffectEnabled(EffectId::Drive) ? 1.0f : 0.0f,
+            effectChain_.isEffectEnabled(EffectId::Eq) ? 1.0f : 0.0f,
+            effectChain_.isEffectEnabled(EffectId::Delay) ? 1.0f : 0.0f
     };
 }
 

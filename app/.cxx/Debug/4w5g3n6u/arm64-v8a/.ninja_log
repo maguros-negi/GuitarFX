@@ -1,13 +1,11 @@
 # ninja log v5
-31	23949	8064219267318472	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
-15	3403	8064225869104515	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
-3404	3847	8064225873558082	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	6d9432c1953d3f2f
-30	2957	8064247604853848	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
-7	3178	8064247607106501	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
-3179	3582	8064247611194516	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	6d9432c1953d3f2f
-23	2465	8064253004693739	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
-9	2555	8064253005607057	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
-2555	2809	8064253008190740	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	6d9432c1953d3f2f
-31	3526	8064260956650410	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
-13	3764	8064260959073949	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
-3764	4266	8064260964093695	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	6d9432c1953d3f2f
+40	2431	8064297955036230	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
+26	2632	8064297957082939	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
+2632	2814	8064297958961910	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	e2951616e0be2e78
+9	1321	8064297943919097	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
+0	17	0	clean	1fd208ba1d1ef161
+0	19	0	clean	1fd208ba1d1ef161
+7	1047	8064299714439183	CMakeFiles/guitarfx.dir/EffectChain.cpp.o	462a795351f40e2
+31	1992	8064299723848922	CMakeFiles/guitarfx.dir/JniBridge.cpp.o	1a877683054d2412
+19	2201	8064299725943424	CMakeFiles/guitarfx.dir/NativeAudioEngine.cpp.o	9c4137c79334bbf5
+2202	2354	8064299727543790	C:/Users/souta/Downloads/GuitarFX_v0.1/GuitarFX_v0.1/app/build/intermediates/cxx/Debug/4w5g3n6u/obj/arm64-v8a/libguitarfx.so	e2951616e0be2e78

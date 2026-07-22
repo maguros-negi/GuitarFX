@@ -4,6 +4,7 @@ project(guitarfx)
 find_package(oboe REQUIRED CONFIG)
 
 add_library(guitarfx SHARED
+    EffectChain.cpp
     NativeAudioEngine.cpp
     JniBridge.cpp
 )
