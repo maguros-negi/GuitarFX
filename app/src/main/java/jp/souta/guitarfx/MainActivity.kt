@@ -1,6 +1,5 @@
 package jp.souta.guitarfx
 
-import kotlin.time.Duration.Companion.milliseconds
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -8,20 +7,74 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
+
+private val AppBackground = Color(0xFF090B0E)
+private val PanelBackground = Color(0xFF14181D)
+private val PanelBackgroundLight = Color(0xFF1B2027)
+private val PanelBorder = Color(0xFF303740)
+private val PrimaryGreen = Color(0xFF59E3B2)
+private val AccentCyan = Color(0xFF55C7F3)
+private val WarningOrange = Color(0xFFFFAD42)
+private val ErrorRed = Color(0xFFFF5D6C)
+private val MutedText = Color(0xFF929AA5)
+private val MeterBackground = Color(0xFF272D34)
 
 class MainActivity : ComponentActivity() {
+
     private val engine = AudioEngine()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,15 +90,45 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         engine.stop()
         engine.destroy()
-
         super.onDestroy()
     }
 }
 
+private enum class EffectType(
+    val shortName: String,
+    val fullName: String,
+    val description: String,
+    val accentColor: Color
+) {
+    GATE(
+        shortName = "GATE",
+        fullName = "NOISE GATE",
+        description = "小さい入力音やノイズを抑えるエフェクトです。",
+        accentColor = Color(0xFF66D17A)
+    ),
+    DRIVE(
+        shortName = "DRIVE",
+        fullName = "OVERDRIVE",
+        description = "ギターサウンドへ歪みと音圧を加えるエフェクトです。",
+        accentColor = Color(0xFFFF984F)
+    ),
+    EQ(
+        shortName = "EQ",
+        fullName = "3 BAND EQ",
+        description = "低域・中域・高域のバランスを調整するエフェクトです。",
+        accentColor = Color(0xFF55B8FF)
+    ),
+    DELAY(
+        shortName = "DELAY",
+        fullName = "DIGITAL DELAY",
+        description = "入力音を遅らせて繰り返し再生するエフェクトです。",
+        accentColor = Color(0xFFB68CFF)
+    )
+}
+
 @Composable
 private fun GuitarFxApp(engine: AudioEngine) {
-    val context =
-        androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     var hasPermission by remember {
         mutableStateOf(
@@ -56,12 +139,11 @@ private fun GuitarFxApp(engine: AudioEngine) {
         )
     }
 
-    val permissionLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            hasPermission = granted
-        }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+    }
 
     var stats by remember {
         mutableStateOf(AudioStats())
@@ -83,6 +165,14 @@ private fun GuitarFxApp(engine: AudioEngine) {
         mutableStateOf(false)
     }
 
+    var selectedEffect by remember {
+        mutableStateOf(EffectType.DRIVE)
+    }
+
+    var diagnosticsExpanded by remember {
+        mutableStateOf(false)
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             stats = engine.readStats()
@@ -92,123 +182,90 @@ private fun GuitarFxApp(engine: AudioEngine) {
 
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Color(0xFF63E6BE),
-            background = Color(0xFF101318),
-            surface = Color(0xFF1A1F26),
-            error = Color(0xFFFF8A80)
+            primary = PrimaryGreen,
+            secondary = AccentCyan,
+            background = AppBackground,
+            surface = PanelBackground,
+            error = ErrorRed,
+            onPrimary = AppBackground,
+            onBackground = Color.White,
+            onSurface = Color.White
         )
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            color = AppBackground
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement =
-                    Arrangement.spacedBy(12.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = 14.dp,
+                        top = 12.dp,
+                        end = 14.dp,
+                        bottom = 24.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "GuitarFX",
-                        style =
-                            MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                AppHeader(stats = stats)
 
-                    Text(
-                        text = "v0.1",
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                CompactLevelPanel(
+                    inputPeakDb = stats.inputPeakDb,
+                    outputPeakDb = stats.outputPeakDb
+                )
 
-                StatusCard(stats)
+                SectionLabel(
+                    title = "SIGNAL CHAIN",
+                    subtitle = "INPUT  →  EFFECTS  →  OUTPUT"
+                )
 
-                MeterCard(
-                    title = "INPUT",
-                    peakDb = stats.inputPeakDb,
-                    gainDb = inputGain,
-                    enabled = !bypassed,
-                    onGainChanged = { value ->
-                        inputGain = value
-                        engine.setInputGainDb(value)
+                EffectChainPanel(
+                    selectedEffect = selectedEffect,
+                    onEffectSelected = { effect ->
+                        selectedEffect = effect
                     }
                 )
 
-                MeterCard(
-                    title = "OUTPUT",
-                    peakDb = stats.outputPeakDb,
-                    gainDb = outputGain,
+                SelectedEffectPanel(
+                    selectedEffect = selectedEffect
+                )
+
+                SectionLabel(
+                    title = "GLOBAL CONTROL",
+                    subtitle = "INPUT / MASTER"
+                )
+
+                GlobalGainPanel(
+                    inputGain = inputGain,
+                    outputGain = outputGain,
+                    inputPeakDb = stats.inputPeakDb,
+                    outputPeakDb = stats.outputPeakDb,
                     enabled = !bypassed,
-                    onGainChanged = { value ->
+                    onInputGainChanged = { value ->
+                        inputGain = value
+                        engine.setInputGainDb(value)
+                    },
+                    onOutputGainChanged = { value ->
                         outputGain = value
                         engine.setOutputGainDb(value)
                     }
                 )
 
-                Button(
-                    onClick = {
-                        bypassed = !bypassed
-                        engine.setBypassed(bypassed)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor =
-                            if (bypassed) {
-                                Color(0xFFFFB74D)
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
-                        contentColor =
-                            if (bypassed) {
-                                Color(0xFF101318)
-                            } else {
-                                Color.White
-                            }
-                    )
-                ) {
-                    Text(
-                        text =
-                            if (bypassed) {
-                                "BYPASS ON"
-                            } else {
-                                "BYPASS OFF"
-                            }
-                    )
-                }
-
-                Button(
-                    onClick = {
+                FootSwitchPanel(
+                    hasPermission = hasPermission,
+                    stats = stats,
+                    muted = muted,
+                    bypassed = bypassed,
+                    onMuteClick = {
                         muted = !muted
                         engine.setMuted(muted)
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor =
-                            if (muted) {
-                                Color(0xFFE85D75)
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(
-                        text =
-                            if (muted) {
-                                "MUTED"
-                            } else {
-                                "MUTE"
-                            }
-                    )
-                }
-
-                Button(
-                    onClick = {
+                    onBypassClick = {
+                        bypassed = !bypassed
+                        engine.setBypassed(bypassed)
+                    },
+                    onStartStopClick = {
                         if (!hasPermission) {
                             permissionLauncher.launch(
                                 Manifest.permission.RECORD_AUDIO
@@ -222,215 +279,709 @@ private fun GuitarFxApp(engine: AudioEngine) {
                             engine.setBypassed(bypassed)
                             engine.start()
                         }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Text(
-                        text =
-                            if (!hasPermission) {
-                                "マイク権限を許可"
-                            } else if (stats.running) {
-                                "STOP"
-                            } else {
-                                "START"
-                            }
-                    )
-                }
+                    }
+                )
 
                 if (stats.error.isNotBlank()) {
-                    Text(
-                        text = stats.error,
-                        color = MaterialTheme.colorScheme.error,
-                        style =
-                            MaterialTheme.typography.bodySmall
-                    )
+                    ErrorPanel(error = stats.error)
                 }
+
+                DiagnosticsPanel(
+                    stats = stats,
+                    expanded = diagnosticsExpanded,
+                    onExpandedChange = {
+                        diagnosticsExpanded = !diagnosticsExpanded
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun StatusCard(stats: AudioStats) {
-    val stateText = when (stats.state) {
-        AudioEngineState.RUNNING ->
-            "● RUNNING"
-
-        AudioEngineState.DISCONNECTED ->
-            "○ DISCONNECTED"
-
-        AudioEngineState.ERROR ->
-            "○ ERROR"
-
-        AudioEngineState.STOPPED ->
-            "○ STOPPED"
-    }
-
-    val stateColor = when (stats.state) {
-        AudioEngineState.RUNNING ->
-            Color(0xFF63E6BE)
-
-        AudioEngineState.DISCONNECTED ->
-            Color(0xFFFFB74D)
-
-        AudioEngineState.ERROR ->
-            Color(0xFFFF8A80)
-
-        AudioEngineState.STOPPED ->
-            Color.LightGray
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor =
-                MaterialTheme.colorScheme.surface
-        )
+private fun AppHeader(stats: AudioStats) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement =
-                Arrangement.spacedBy(5.dp)
-        ) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Guitar",
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.Black
+                )
+
+                Text(
+                    text = "FX",
+                    color = PrimaryGreen,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
             Text(
-                text = stateText,
-                color = stateColor,
+                text = "MOBILE MULTI EFFECTS",
+                color = MutedText,
+                fontSize = 10.sp,
+                letterSpacing = 1.6.sp,
                 fontWeight = FontWeight.Bold
             )
+        }
 
-            Text(
-                text = "Sample Rate: ${stats.sampleRate} Hz"
+        Column(
+            horizontalAlignment = Alignment.End
+        ) {
+            EngineStateIndicator(stats.state)
+
+            Spacer(
+                modifier = Modifier.height(3.dp)
             )
 
             Text(
-                text =
-                    "Burst: IN ${stats.inputFramesPerBurst}" +
-                            " / OUT ${stats.outputFramesPerBurst}"
-            )
-
-            Text(
-                text =
-                    "Buffer Size: IN ${stats.inputBufferSize}" +
-                            " / OUT ${stats.outputBufferSize}"
-            )
-
-            Text(
-                text =
-                    "Buffer Capacity: " +
-                            "IN ${stats.inputBufferCapacity}" +
-                            " / OUT ${stats.outputBufferCapacity}"
-            )
-
-            Text(
-                text =
-                    "Channels: IN ${stats.inputChannels}" +
-                            " → OUT ${stats.outputChannels}"
-            )
-
-            Text(
-                text =
-                    "XRuns: IN ${stats.inputXruns}" +
-                            " / OUT ${stats.outputXruns}"
-            )
-
-            Text(
-                text =
-                    "Adaptive Buffer Adjustments: " +
-                            stats.bufferAdjustments,
-                color =
-                    if (stats.bufferAdjustments > 0) {
-                        Color(0xFFFFB74D)
-                    } else {
-                        Color.LightGray
-                    }
-            )
-
-            Text(
-                text =
-                    if (stats.bypassed) {
-                        "Bypass ON"
-                    } else {
-                        "Bypass OFF"
-                    },
-                color =
-                    if (stats.bypassed) {
-                        Color(0xFFFFB74D)
-                    } else {
-                        Color.LightGray
-                    }
+                text = "v0.2 UI PREVIEW",
+                color = MutedText,
+                fontSize = 9.sp,
+                letterSpacing = 1.sp
             )
         }
     }
 }
 
 @Composable
-private fun MeterCard(
-    title: String,
-    peakDb: Float,
-    gainDb: Float,
-    enabled: Boolean,
-    onGainChanged: (Float) -> Unit
+private fun EngineStateIndicator(state: AudioEngineState) {
+    val stateText: String
+    val stateColor: Color
+
+    when (state) {
+        AudioEngineState.RUNNING -> {
+            stateText = "RUNNING"
+            stateColor = PrimaryGreen
+        }
+
+        AudioEngineState.DISCONNECTED -> {
+            stateText = "DISCONNECTED"
+            stateColor = WarningOrange
+        }
+
+        AudioEngineState.ERROR -> {
+            stateText = "ERROR"
+            stateColor = ErrorRed
+        }
+
+        AudioEngineState.STOPPED -> {
+            stateText = "STOPPED"
+            stateColor = MutedText
+        }
+    }
+
+    Surface(
+        color = stateColor.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(50),
+        border = BorderStroke(
+            width = 1.dp,
+            color = stateColor.copy(alpha = 0.65f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 10.dp,
+                vertical = 5.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .background(
+                        color = stateColor,
+                        shape = CircleShape
+                    )
+            )
+
+            Spacer(
+                modifier = Modifier.width(6.dp)
+            )
+
+            Text(
+                text = stateText,
+                color = stateColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactLevelPanel(
+    inputPeakDb: Float,
+    outputPeakDb: Float
 ) {
     Card(
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor =
-                MaterialTheme.colorScheme.surface
+            containerColor = PanelBackground
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PanelBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            CompactMeter(
+                label = "IN",
+                peakDb = inputPeakDb,
+                accentColor = PrimaryGreen
+            )
+
+            CompactMeter(
+                label = "OUT",
+                peakDb = outputPeakDb,
+                accentColor = AccentCyan
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactMeter(
+    label: String,
+    peakDb: Float,
+    accentColor: Color
+) {
+    val fraction = ((peakDb + 60f) / 60f)
+        .coerceIn(0f, 1f)
+
+    val meterColor = when {
+        peakDb > -1f -> ErrorRed
+        peakDb > -6f -> WarningOrange
+        else -> accentColor
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.width(34.dp),
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black
         )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(9.dp)
+                .background(
+                    color = MeterBackground,
+                    shape = RoundedCornerShape(2.dp)
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .background(
+                        color = meterColor,
+                        shape = RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+
+        Text(
+            text = "${formatOneDecimal(peakDb)} dBFS",
+            modifier = Modifier.width(82.dp),
+            color = meterColor,
+            textAlign = TextAlign.End,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(
+    title: String,
+    subtitle: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                top = 2.dp,
+                start = 2.dp,
+                end = 2.dp
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.3.sp
+        )
+
+        Text(
+            text = subtitle,
+            color = MutedText,
+            fontSize = 9.sp,
+            letterSpacing = 0.8.sp
+        )
+    }
+}
+
+@Composable
+private fun EffectChainPanel(
+    selectedEffect: EffectType,
+    onEffectSelected: (EffectType) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = PanelBackground
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PanelBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SignalEndpoint(
+                text = "IN",
+                accentColor = PrimaryGreen
+            )
+
+            SignalCable()
+
+            EffectType.entries.forEachIndexed { index, effect ->
+                EffectBlock(
+                    effect = effect,
+                    selected = selectedEffect == effect,
+                    onClick = {
+                        onEffectSelected(effect)
+                    }
+                )
+
+                if (index != EffectType.entries.lastIndex) {
+                    SignalCable()
+                }
+            }
+
+            SignalCable()
+
+            SignalEndpoint(
+                text = "OUT",
+                accentColor = AccentCyan
+            )
+        }
+    }
+}
+
+@Composable
+private fun SignalEndpoint(
+    text: String,
+    accentColor: Color
+) {
+    Column(
+        modifier = Modifier.width(42.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(
+                    color = accentColor.copy(alpha = 0.14f),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(
+                        color = accentColor,
+                        shape = CircleShape
+                    )
+            )
+        }
+
+        Spacer(
+            modifier = Modifier.height(5.dp)
+        )
+
+        Text(
+            text = text,
+            color = accentColor,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun SignalCable() {
+    Box(
+        modifier = Modifier
+            .width(14.dp)
+            .height(2.dp)
+            .background(PanelBorder)
+    )
+}
+
+@Composable
+private fun EffectBlock(
+    effect: EffectType,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (selected) {
+        effect.accentColor
+    } else {
+        PanelBorder
+    }
+
+    val backgroundColor = if (selected) {
+        effect.accentColor.copy(alpha = 0.11f)
+    } else {
+        PanelBackgroundLight
+    }
+
+    Card(
+        modifier = Modifier
+            .width(78.dp)
+            .height(94.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor
+        ),
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = borderColor
+        ),
+        shape = RoundedCornerShape(9.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
+                .fillMaxSize()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(9.dp)
+                    .background(
+                        color = MutedText.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+            )
+
+            Text(
+                text = effect.shortName,
+                color = if (selected) {
+                    effect.accentColor
+                } else {
+                    Color.White
+                },
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = "OFF",
+                color = MutedText,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectedEffectPanel(
+    selectedEffect: EffectType
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = PanelBackgroundLight
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = selectedEffect.accentColor.copy(alpha = 0.55f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = title,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "SELECTED EFFECT",
+                        color = MutedText,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    )
 
-                Text(
-                    text =
-                        "${formatOneDecimal(peakDb)} dBFS"
-                )
+                    Spacer(
+                        modifier = Modifier.height(4.dp)
+                    )
+
+                    Text(
+                        text = selectedEffect.fullName,
+                        color = selectedEffect.accentColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+
+                Surface(
+                    color = selectedEffect.accentColor.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = selectedEffect.accentColor.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Text(
+                        text = "COMING SOON",
+                        modifier = Modifier.padding(
+                            horizontal = 9.dp,
+                            vertical = 5.dp
+                        ),
+                        color = selectedEffect.accentColor,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
             }
 
             Spacer(
                 modifier = Modifier.height(8.dp)
             )
 
-            val fraction =
-                ((peakDb + 60f) / 60f)
-                    .coerceIn(0f, 1f)
+            Text(
+                text = selectedEffect.description,
+                color = Color(0xFFD2D6DB),
+                fontSize = 12.sp
+            )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(12.dp)
-                    .background(
-                        color = Color(0xFF2A3038),
-                        shape = RoundedCornerShape(6.dp)
-                    )
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .fillMaxHeight()
-                        .background(
-                            color =
-                                if (peakDb > -1f) {
-                                    Color.Red
-                                } else {
-                                    Color(0xFF63E6BE)
-                                },
-                            shape = RoundedCornerShape(6.dp)
-                        )
+                ParameterPlaceholder(
+                    label = firstParameterName(selectedEffect),
+                    modifier = Modifier.weight(1f)
+                )
+
+                ParameterPlaceholder(
+                    label = secondParameterName(selectedEffect),
+                    modifier = Modifier.weight(1f)
+                )
+
+                ParameterPlaceholder(
+                    label = thirdParameterName(selectedEffect),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParameterPlaceholder(
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .alpha(0.55f)
+            .background(
+                color = AppBackground.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(
+                horizontal = 6.dp,
+                vertical = 10.dp
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(27.dp)
+                .background(
+                    color = PanelBorder,
+                    shape = CircleShape
+                )
+        )
+
+        Spacer(
+            modifier = Modifier.height(6.dp)
+        )
+
+        Text(
+            text = label,
+            color = MutedText,
+            textAlign = TextAlign.Center,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+    }
+}
+
+private fun firstParameterName(effect: EffectType): String {
+    return when (effect) {
+        EffectType.GATE -> "THRESHOLD"
+        EffectType.DRIVE -> "DRIVE"
+        EffectType.EQ -> "LOW"
+        EffectType.DELAY -> "TIME"
+    }
+}
+
+private fun secondParameterName(effect: EffectType): String {
+    return when (effect) {
+        EffectType.GATE -> "ATTACK"
+        EffectType.DRIVE -> "TONE"
+        EffectType.EQ -> "MID"
+        EffectType.DELAY -> "FEEDBACK"
+    }
+}
+
+private fun thirdParameterName(effect: EffectType): String {
+    return when (effect) {
+        EffectType.GATE -> "RELEASE"
+        EffectType.DRIVE -> "LEVEL"
+        EffectType.EQ -> "HIGH"
+        EffectType.DELAY -> "MIX"
+    }
+}
+
+@Composable
+private fun GlobalGainPanel(
+    inputGain: Float,
+    outputGain: Float,
+    inputPeakDb: Float,
+    outputPeakDb: Float,
+    enabled: Boolean,
+    onInputGainChanged: (Float) -> Unit,
+    onOutputGainChanged: (Float) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        GainControlCard(
+            title = "INPUT",
+            subtitle = "PRE GAIN",
+            peakDb = inputPeakDb,
+            gainDb = inputGain,
+            enabled = enabled,
+            accentColor = PrimaryGreen,
+            modifier = Modifier.weight(1f),
+            onGainChanged = onInputGainChanged
+        )
+
+        GainControlCard(
+            title = "MASTER",
+            subtitle = "OUTPUT",
+            peakDb = outputPeakDb,
+            gainDb = outputGain,
+            enabled = enabled,
+            accentColor = AccentCyan,
+            modifier = Modifier.weight(1f),
+            onGainChanged = onOutputGainChanged
+        )
+    }
+}
+
+@Composable
+private fun GainControlCard(
+    title: String,
+    subtitle: String,
+    peakDb: Float,
+    gainDb: Float,
+    enabled: Boolean,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    onGainChanged: (Float) -> Unit
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = PanelBackground
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PanelBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column {
+                    Text(
+                        text = title,
+                        color = accentColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black
+                    )
+
+                    Text(
+                        text = subtitle,
+                        color = MutedText,
+                        fontSize = 8.sp,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+
+                Text(
+                    text = "${formatOneDecimal(peakDb)} dBFS",
+                    color = MutedText,
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace
                 )
             }
 
@@ -446,26 +997,447 @@ private fun MeterCard(
             )
 
             Text(
-                text =
-                    if (enabled) {
-                        "Gain ${formatOneDecimal(gainDb)} dB"
-                    } else {
-                        "Gain ${formatOneDecimal(gainDb)} dB " +
-                                "(Bypassed)"
-                    },
-                color =
-                    if (enabled) {
-                        Color.Unspecified
-                    } else {
-                        Color.LightGray
-                    }
+                text = if (enabled) {
+                    "${formatOneDecimal(gainDb)} dB"
+                } else {
+                    "${formatOneDecimal(gainDb)} dB  BYPASSED"
+                },
+                modifier = Modifier.fillMaxWidth(),
+                color = if (enabled) {
+                    Color.White
+                } else {
+                    WarningOrange
+                },
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center
             )
         }
     }
 }
 
+@Composable
+private fun FootSwitchPanel(
+    hasPermission: Boolean,
+    stats: AudioStats,
+    muted: Boolean,
+    bypassed: Boolean,
+    onMuteClick: () -> Unit,
+    onBypassClick: () -> Unit,
+    onStartStopClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF111419)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PanelBorder
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "FOOT CONTROLS",
+                color = MutedText,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FootSwitchButton(
+                    label = if (muted) {
+                        "MUTED"
+                    } else {
+                        "MUTE"
+                    },
+                    active = muted,
+                    activeColor = ErrorRed,
+                    modifier = Modifier.weight(1f),
+                    onClick = onMuteClick
+                )
+
+                FootSwitchButton(
+                    label = if (bypassed) {
+                        "BYPASS ON"
+                    } else {
+                        "BYPASS"
+                    },
+                    active = bypassed,
+                    activeColor = WarningOrange,
+                    modifier = Modifier.weight(1f),
+                    onClick = onBypassClick
+                )
+
+                StartStopButton(
+                    hasPermission = hasPermission,
+                    running = stats.running,
+                    modifier = Modifier.weight(1f),
+                    onClick = onStartStopClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FootSwitchButton(
+    label: String,
+    active: Boolean,
+    activeColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (active) {
+        activeColor.copy(alpha = 0.18f)
+    } else {
+        PanelBackgroundLight
+    }
+
+    val borderColor = if (active) {
+        activeColor
+    } else {
+        PanelBorder
+    }
+
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(67.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(
+            width = if (active) 2.dp else 1.dp,
+            color = borderColor
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = backgroundColor,
+            contentColor = if (active) {
+                activeColor
+            } else {
+                Color.White
+            }
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = 4.dp,
+            vertical = 6.dp
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = if (active) {
+                            activeColor
+                        } else {
+                            MutedText.copy(alpha = 0.35f)
+                        },
+                        shape = CircleShape
+                    )
+            )
+
+            Spacer(
+                modifier = Modifier.height(7.dp)
+            )
+
+            Text(
+                text = label,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun StartStopButton(
+    hasPermission: Boolean,
+    running: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val buttonText = when {
+        !hasPermission -> "PERMISSION"
+        running -> "STOP"
+        else -> "START"
+    }
+
+    val buttonColor = when {
+        !hasPermission -> WarningOrange
+        running -> ErrorRed
+        else -> PrimaryGreen
+    }
+
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(67.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = buttonColor,
+            contentColor = AppBackground
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = 4.dp,
+            vertical = 6.dp
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = AppBackground.copy(alpha = 0.75f),
+                        shape = CircleShape
+                    )
+            )
+
+            Spacer(
+                modifier = Modifier.height(7.dp)
+            )
+
+            Text(
+                text = buttonText,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun ErrorPanel(error: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = ErrorRed.copy(alpha = 0.1f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = ErrorRed.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "AUDIO ENGINE ERROR",
+                color = ErrorRed,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(5.dp)
+            )
+
+            Text(
+                text = error,
+                color = Color(0xFFFFC8CD),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsPanel(
+    stats: AudioStats,
+    expanded: Boolean,
+    onExpandedChange: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .clickable(onClick = onExpandedChange),
+        colors = CardDefaults.cardColors(
+            containerColor = PanelBackground
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PanelBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(13.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "AUDIO DIAGNOSTICS",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.1.sp
+                    )
+
+                    Text(
+                        text = "XRuns IN ${stats.inputXruns} / OUT ${stats.outputXruns}",
+                        color = if (
+                            stats.inputXruns > 0 ||
+                            stats.outputXruns > 0
+                        ) {
+                            WarningOrange
+                        } else {
+                            MutedText
+                        },
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Text(
+                    text = if (expanded) {
+                        "▲ CLOSE"
+                    } else {
+                        "▼ DETAILS"
+                    },
+                    color = AccentCyan,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (expanded) {
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                HorizontalDivider(
+                    color = PanelBorder
+                )
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
+
+                DiagnosticRow(
+                    label = "Sample Rate",
+                    value = "${stats.sampleRate} Hz"
+                )
+
+                DiagnosticRow(
+                    label = "Frames Per Burst",
+                    value = "IN ${stats.inputFramesPerBurst} / " +
+                            "OUT ${stats.outputFramesPerBurst}"
+                )
+
+                DiagnosticRow(
+                    label = "Buffer Size",
+                    value = "IN ${stats.inputBufferSize} / " +
+                            "OUT ${stats.outputBufferSize}"
+                )
+
+                DiagnosticRow(
+                    label = "Buffer Capacity",
+                    value = "IN ${stats.inputBufferCapacity} / " +
+                            "OUT ${stats.outputBufferCapacity}"
+                )
+
+                DiagnosticRow(
+                    label = "Channels",
+                    value = "IN ${stats.inputChannels} / " +
+                            "OUT ${stats.outputChannels}"
+                )
+
+                DiagnosticRow(
+                    label = "XRuns",
+                    value = "IN ${stats.inputXruns} / " +
+                            "OUT ${stats.outputXruns}",
+                    warning = stats.inputXruns > 0 ||
+                            stats.outputXruns > 0
+                )
+
+                DiagnosticRow(
+                    label = "Buffer Adjustments",
+                    value = stats.bufferAdjustments.toString(),
+                    warning = stats.bufferAdjustments > 0
+                )
+
+                DiagnosticRow(
+                    label = "Master Bypass",
+                    value = if (stats.bypassed) {
+                        "ON"
+                    } else {
+                        "OFF"
+                    },
+                    warning = stats.bypassed
+                )
+
+                DiagnosticRow(
+                    label = "Mute",
+                    value = if (stats.muted) {
+                        "ON"
+                    } else {
+                        "OFF"
+                    },
+                    warning = stats.muted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticRow(
+    label: String,
+    value: String,
+    warning: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 27.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = MutedText,
+            fontSize = 10.sp
+        )
+
+        Text(
+            text = value,
+            color = if (warning) {
+                WarningOrange
+            } else {
+                Color(0xFFDFE3E7)
+            },
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
 private fun formatOneDecimal(value: Float): String {
-    return (
-            (value * 10f).roundToInt() / 10f
-            ).toString()
+    return ((value * 10f).roundToInt() / 10f).toString()
 }
