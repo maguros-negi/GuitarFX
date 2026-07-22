@@ -31,6 +31,10 @@ public:
     bool setOverdriveParameters(float drive, float tone, float level) noexcept;
     bool setThreeBandEqGains(float lowDb, float midDb, float highDb) noexcept;
     bool setDelayParameters(float timeMs, float feedback, float mix) noexcept;
+    bool setDistortionParameters(float distortion, float bass, float middle, float treble, float level) noexcept;
+    bool setFuzzParameters(float fuzz, float tone, float bias, float level) noexcept;
+    bool setPreampParameters(float gain, float bass, float middle, float treble, float presence, float master) noexcept;
+    bool setCabinetParameters(float cabinetModel, float micPosition) noexcept;
 
     const std::string& instanceId() const noexcept;
     EffectModelId modelId() const noexcept;

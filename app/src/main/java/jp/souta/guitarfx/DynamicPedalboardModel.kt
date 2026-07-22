@@ -4,13 +4,26 @@ import java.util.UUID
 
 enum class EffectModelId(val persistentId: String) {
     NOISE_GATE("noise_gate"),
+    TIGHT_NOISE_GATE("tight_noise_gate"),
     CLASSIC_OVERDRIVE("classic_overdrive"),
-    THREE_BAND_EQ("three_band_eq"),
-    DIGITAL_DELAY("digital_delay"),
+    MID_BOOST_OVERDRIVE("mid_boost_overdrive"),
+    TRANSPARENT_OVERDRIVE("transparent_overdrive"),
     DISTORTION("distortion"),
+    MODERN_DISTORTION("modern_distortion"),
     VINTAGE_FUZZ("vintage_fuzz"),
+    GATED_FUZZ("gated_fuzz"),
+    THREE_BAND_EQ("three_band_eq"),
+    SCOOP_EQ("scoop_eq"),
+    DIGITAL_DELAY("digital_delay"),
+    SLAPBACK_DELAY("slapback_delay"),
+    AMBIENT_DELAY("ambient_delay"),
     PREAMP("preamp"),
-    CABINET("cabinet");
+    CLEAN_PREAMP("clean_preamp"),
+    HIGH_GAIN_PREAMP("high_gain_preamp"),
+    CABINET("cabinet"),
+    CABINET_1X12("cabinet_1x12"),
+    CABINET_2X12("cabinet_2x12"),
+    CABINET_4X12("cabinet_4x12");
 
     companion object {
         fun fromPersistentId(value: String): EffectModelId? =
@@ -19,8 +32,14 @@ enum class EffectModelId(val persistentId: String) {
 }
 
 enum class EffectCategory(val displayName: String) {
-    DYNAMICS("DYNAMICS"), DRIVE("DRIVE"), EQUALIZER("EQUALIZER"),
-    DELAY("DELAY"), PREAMP("PREAMP"), CABINET("CABINET")
+    NOISE_GATE("NOISE GATE"),
+    OVERDRIVE("OVERDRIVE"),
+    DISTORTION("DISTORTION"),
+    FUZZ("FUZZ"),
+    EQUALIZER("EQUALIZER"),
+    DELAY("DELAY"),
+    PREAMP("PREAMP"),
+    CABINET("CABINET")
 }
 
 enum class ParameterValueType { DECIMAL, INTEGER, PERCENT, DECIBEL, DECIBEL_FS, MILLISECONDS, ENUM }
@@ -162,31 +181,88 @@ class EffectRegistry private constructor(descriptors: List<EffectDescriptor>) {
 private fun p(id: String, name: String, min: Float, max: Float, default: Float, type: ParameterValueType, unit: String) =
     ParameterDescriptor(id, name, min, max, default, type, unit)
 
+private fun gate(model: EffectModelId, name: String, threshold: Float, attack: Float, release: Float) =
+    EffectDescriptor(model, name, "GATE", EffectCategory.NOISE_GATE, "", listOf(
+        p("threshold_db", "THRESHOLD", -80f, -10f, threshold, ParameterValueType.DECIBEL_FS, "dBFS"),
+        p("attack_ms", "ATTACK", 1f, 100f, attack, ParameterValueType.MILLISECONDS, "ms"),
+        p("release_ms", "RELEASE", 10f, 1000f, release, ParameterValueType.MILLISECONDS, "ms")))
+
+private fun overdrive(model: EffectModelId, name: String, drive: Float, tone: Float, level: Float) =
+    EffectDescriptor(model, name, "OD", EffectCategory.OVERDRIVE, "", listOf(
+        p("drive", "DRIVE", 0f, 100f, drive, ParameterValueType.PERCENT, "%"),
+        p("tone", "TONE", 0f, 100f, tone, ParameterValueType.PERCENT, "%"),
+        p("level", "LEVEL", 0f, 100f, level, ParameterValueType.PERCENT, "%")))
+
+private fun distortion(model: EffectModelId, name: String, amount: Float, bass: Float, middle: Float, treble: Float) =
+    EffectDescriptor(model, name, "DIST", EffectCategory.DISTORTION, "", listOf(
+        p("distortion", "DISTORTION", 0f, 100f, amount, ParameterValueType.PERCENT, "%"),
+        p("bass", "BASS", 0f, 100f, bass, ParameterValueType.PERCENT, "%"),
+        p("middle", "MIDDLE", 0f, 100f, middle, ParameterValueType.PERCENT, "%"),
+        p("treble", "TREBLE", 0f, 100f, treble, ParameterValueType.PERCENT, "%"),
+        p("level", "LEVEL", 0f, 100f, 50f, ParameterValueType.PERCENT, "%")))
+
+private fun fuzz(model: EffectModelId, name: String, amount: Float, tone: Float, bias: Float) =
+    EffectDescriptor(model, name, "FUZZ", EffectCategory.FUZZ, "", listOf(
+        p("fuzz", "FUZZ", 0f, 100f, amount, ParameterValueType.PERCENT, "%"),
+        p("tone", "TONE", 0f, 100f, tone, ParameterValueType.PERCENT, "%"),
+        p("bias", "BIAS", 0f, 100f, bias, ParameterValueType.PERCENT, "%"),
+        p("level", "LEVEL", 0f, 100f, 50f, ParameterValueType.PERCENT, "%")))
+
+private fun eq(model: EffectModelId, name: String, low: Float, mid: Float, high: Float) =
+    EffectDescriptor(model, name, "EQ", EffectCategory.EQUALIZER, "", listOf(
+        p("low_db", "LOW", -12f, 12f, low, ParameterValueType.DECIBEL, "dB"),
+        p("mid_db", "MID", -12f, 12f, mid, ParameterValueType.DECIBEL, "dB"),
+        p("high_db", "HIGH", -12f, 12f, high, ParameterValueType.DECIBEL, "dB")))
+
+private fun delay(model: EffectModelId, name: String, time: Float, feedback: Float, mix: Float) =
+    EffectDescriptor(model, name, "DELAY", EffectCategory.DELAY, "", listOf(
+        p("time_ms", "TIME", 20f, 1000f, time, ParameterValueType.MILLISECONDS, "ms"),
+        p("feedback", "FEEDBACK", 0f, 90f, feedback, ParameterValueType.PERCENT, "%"),
+        p("mix", "MIX", 0f, 100f, mix, ParameterValueType.PERCENT, "%")))
+
+private fun preamp(model: EffectModelId, name: String, gain: Float, bass: Float, middle: Float, treble: Float, presence: Float) =
+    EffectDescriptor(model, name, "PRE", EffectCategory.PREAMP, "", listOf(
+        p("gain", "GAIN", 0f, 100f, gain, ParameterValueType.PERCENT, "%"),
+        p("bass", "BASS", 0f, 100f, bass, ParameterValueType.PERCENT, "%"),
+        p("middle", "MIDDLE", 0f, 100f, middle, ParameterValueType.PERCENT, "%"),
+        p("treble", "TREBLE", 0f, 100f, treble, ParameterValueType.PERCENT, "%"),
+        p("presence", "PRESENCE", 0f, 100f, presence, ParameterValueType.PERCENT, "%"),
+        p("master", "MASTER", 0f, 100f, 50f, ParameterValueType.PERCENT, "%")))
+
+private fun cabinet(model: EffectModelId, name: String, cabinetModel: Float, mic: Float) =
+    EffectDescriptor(model, name, "CAB", EffectCategory.CABINET, "", listOf(
+        ParameterDescriptor("cabinet_model", "CABINET", 0f, 2f, cabinetModel, ParameterValueType.ENUM, "", 1f, listOf("1x12", "2x12", "4x12")),
+        p("mic_position", "MIC POSITION", 0f, 100f, mic, ParameterValueType.PERCENT, "%")))
+
 private fun defaultDescriptors() = listOf(
-    EffectDescriptor(EffectModelId.NOISE_GATE, "Noise Gate", "GATE", EffectCategory.DYNAMICS,
-        "小さい入力音やノイズを抑えます。", listOf(
-            p("threshold_db", "THRESHOLD", -80f, -10f, -50f, ParameterValueType.DECIBEL_FS, "dBFS"),
-            p("attack_ms", "ATTACK", 1f, 100f, 5f, ParameterValueType.MILLISECONDS, "ms"),
-            p("release_ms", "RELEASE", 10f, 1000f, 120f, ParameterValueType.MILLISECONDS, "ms"))),
-    EffectDescriptor(EffectModelId.CLASSIC_OVERDRIVE, "Classic Overdrive", "OD", EffectCategory.DRIVE,
-        "滑らかなソフトクリッピングのオーバードライブです。", listOf(
-            p("drive", "DRIVE", 0f, 100f, 35f, ParameterValueType.PERCENT, "%"),
-            p("tone", "TONE", 0f, 100f, 50f, ParameterValueType.PERCENT, "%"),
-            p("level", "LEVEL", 0f, 100f, 50f, ParameterValueType.PERCENT, "%"))),
-    EffectDescriptor(EffectModelId.THREE_BAND_EQ, "3 Band EQ", "EQ", EffectCategory.EQUALIZER,
-        "低域、中域、高域のバランスを調整します。", listOf(
-            p("low_db", "LOW", -12f, 12f, 0f, ParameterValueType.DECIBEL, "dB"),
-            p("mid_db", "MID", -12f, 12f, 0f, ParameterValueType.DECIBEL, "dB"),
-            p("high_db", "HIGH", -12f, 12f, 0f, ParameterValueType.DECIBEL, "dB"))),
-    EffectDescriptor(EffectModelId.DIGITAL_DELAY, "Digital Delay", "DELAY", EffectCategory.DELAY,
-        "入力音を遅らせて繰り返し再生します。", listOf(
-            p("time_ms", "TIME", 20f, 1000f, 350f, ParameterValueType.MILLISECONDS, "ms"),
-            p("feedback", "FEEDBACK", 0f, 90f, 35f, ParameterValueType.PERCENT, "%"),
-            p("mix", "MIX", 0f, 100f, 25f, ParameterValueType.PERCENT, "%"))),
-    EffectDescriptor(EffectModelId.DISTORTION, "Distortion", "DIST", EffectCategory.DRIVE, "将来追加予定です。", emptyList(), false),
-    EffectDescriptor(EffectModelId.VINTAGE_FUZZ, "Vintage Fuzz", "FUZZ", EffectCategory.DRIVE, "将来追加予定です。", emptyList(), false),
-    EffectDescriptor(EffectModelId.PREAMP, "Preamp", "PRE", EffectCategory.PREAMP, "将来追加予定です。", emptyList(), false),
-    EffectDescriptor(EffectModelId.CABINET, "Cabinet", "CAB", EffectCategory.CABINET, "将来追加予定です。", emptyList(), false)
+    gate(EffectModelId.NOISE_GATE, "Studio Gate", -50f, 5f, 120f),
+    gate(EffectModelId.TIGHT_NOISE_GATE, "Tight Gate", -42f, 2f, 65f),
+
+    overdrive(EffectModelId.CLASSIC_OVERDRIVE, "Classic Overdrive", 35f, 50f, 50f),
+    overdrive(EffectModelId.MID_BOOST_OVERDRIVE, "Mid Boost OD", 45f, 58f, 62f),
+    overdrive(EffectModelId.TRANSPARENT_OVERDRIVE, "Transparent OD", 25f, 55f, 55f),
+
+    distortion(EffectModelId.DISTORTION, "Classic Distortion", 55f, 50f, 50f, 50f),
+    distortion(EffectModelId.MODERN_DISTORTION, "Modern Distortion", 72f, 58f, 38f, 62f),
+
+    fuzz(EffectModelId.VINTAGE_FUZZ, "Vintage Fuzz", 65f, 50f, 50f),
+    fuzz(EffectModelId.GATED_FUZZ, "Gated Fuzz", 78f, 55f, 72f),
+
+    eq(EffectModelId.THREE_BAND_EQ, "3 Band EQ", 0f, 0f, 0f),
+    eq(EffectModelId.SCOOP_EQ, "Scoop EQ", 3f, -6f, 4f),
+
+    delay(EffectModelId.DIGITAL_DELAY, "Digital Delay", 350f, 35f, 25f),
+    delay(EffectModelId.SLAPBACK_DELAY, "Slapback Delay", 95f, 12f, 22f),
+    delay(EffectModelId.AMBIENT_DELAY, "Ambient Delay", 620f, 58f, 38f),
+
+    preamp(EffectModelId.PREAMP, "Classic Preamp", 40f, 50f, 50f, 50f, 50f),
+    preamp(EffectModelId.CLEAN_PREAMP, "Clean Preamp", 18f, 52f, 48f, 55f, 58f),
+    preamp(EffectModelId.HIGH_GAIN_PREAMP, "High Gain Preamp", 72f, 58f, 42f, 60f, 62f),
+
+    cabinet(EffectModelId.CABINET, "Cabinet Select", 0f, 50f),
+    cabinet(EffectModelId.CABINET_1X12, "Open 1x12", 0f, 58f),
+    cabinet(EffectModelId.CABINET_2X12, "Balanced 2x12", 1f, 50f),
+    cabinet(EffectModelId.CABINET_4X12, "Closed 4x12", 2f, 42f)
 )
 
 fun createLegacyV02Pedalboard(registry: EffectRegistry = EffectRegistry.Default): PedalboardState {

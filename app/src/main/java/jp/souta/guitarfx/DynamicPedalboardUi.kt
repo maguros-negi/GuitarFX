@@ -139,29 +139,39 @@ fun DynamicPedalboardPrototype(
             onDismissRequest = { addDialogVisible = false },
             title = { Text("ADD EFFECT") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                var expandedCategory by remember { mutableStateOf<EffectCategory?>(null) }
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     registry.availableEffects()
                         .groupBy { it.category }
                         .forEach { (category, effects) ->
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val expanded = expandedCategory == category
+                            OutlinedButton(
+                                onClick = {
+                                    expandedCategory = if (expanded) null else category
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
-                                    category.displayName,
-                                    color = BoardCyan,
-                                    fontSize = 10.sp,
+                                    text = if (expanded) "▼ ${category.displayName}" else "▶ ${category.displayName}",
+                                    modifier = Modifier.fillMaxWidth(),
                                     fontWeight = FontWeight.Black
                                 )
+                            }
+                            if (expanded) {
                                 effects.forEach { descriptor ->
-                                    OutlinedButton(
+                                    TextButton(
                                         onClick = {
                                             onStructureChange(state.addEffect(descriptor.modelId, registry))
                                             addDialogVisible = false
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                            Text(descriptor.displayName, fontWeight = FontWeight.Bold)
-                                            Text(descriptor.description, fontSize = 9.sp, color = BoardMuted)
-                                        }
+                                        Text(
+                                            descriptor.displayName,
+                                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                                            color = BoardCyan,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
@@ -274,7 +284,6 @@ private fun SelectedInstanceEditor(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = accent)
                 ) { Text(if (effect.enabled) "ON" else "OFF", fontSize = 9.sp, fontWeight = FontWeight.Black) }
             }
-            Text(descriptor.description, color = Color(0xFFD2D6DB), fontSize = 11.sp)
             descriptor.parameters.forEach { parameter ->
                 val value = effect.parameterValues[parameter.parameterId] ?: parameter.defaultValue
                 DynamicParameterSlider(parameter, value, accent, !masterBypassed) { changed ->
@@ -322,6 +331,7 @@ private fun DynamicParameterSlider(
 }
 
 private fun formatValue(value: Float, parameter: ParameterDescriptor): String = when (parameter.valueType) {
+    ParameterValueType.ENUM -> parameter.enumOptions.getOrNull(value.roundToInt()) ?: "-"
     ParameterValueType.INTEGER, ParameterValueType.PERCENT, ParameterValueType.MILLISECONDS -> "${value.roundToInt()} ${parameter.unit}".trim()
     else -> "${((value * 10f).roundToInt() / 10f)} ${parameter.unit}".trim()
 }
@@ -347,10 +357,32 @@ private fun formatValue(value: Float, parameter: ParameterDescriptor): String = 
 }
 
 private fun modelColor(id: EffectModelId): Color = when (id) {
-    EffectModelId.NOISE_GATE -> Color(0xFF66D17A)
-    EffectModelId.CLASSIC_OVERDRIVE, EffectModelId.DISTORTION, EffectModelId.VINTAGE_FUZZ -> Color(0xFFFF984F)
-    EffectModelId.THREE_BAND_EQ -> Color(0xFF55B8FF)
-    EffectModelId.DIGITAL_DELAY -> Color(0xFFB68CFF)
-    EffectModelId.PREAMP -> Color(0xFFFFD166)
-    EffectModelId.CABINET -> Color(0xFF7BDFF2)
+    EffectModelId.NOISE_GATE,
+    EffectModelId.TIGHT_NOISE_GATE -> Color(0xFF66D17A)
+
+    EffectModelId.CLASSIC_OVERDRIVE,
+    EffectModelId.MID_BOOST_OVERDRIVE,
+    EffectModelId.TRANSPARENT_OVERDRIVE -> Color(0xFFFF984F)
+
+    EffectModelId.DISTORTION,
+    EffectModelId.MODERN_DISTORTION -> Color(0xFFFF6B57)
+
+    EffectModelId.VINTAGE_FUZZ,
+    EffectModelId.GATED_FUZZ -> Color(0xFFE86EFF)
+
+    EffectModelId.THREE_BAND_EQ,
+    EffectModelId.SCOOP_EQ -> Color(0xFF55B8FF)
+
+    EffectModelId.DIGITAL_DELAY,
+    EffectModelId.SLAPBACK_DELAY,
+    EffectModelId.AMBIENT_DELAY -> Color(0xFFB68CFF)
+
+    EffectModelId.PREAMP,
+    EffectModelId.CLEAN_PREAMP,
+    EffectModelId.HIGH_GAIN_PREAMP -> Color(0xFFFFD166)
+
+    EffectModelId.CABINET,
+    EffectModelId.CABINET_1X12,
+    EffectModelId.CABINET_2X12,
+    EffectModelId.CABINET_4X12 -> Color(0xFF7BDFF2)
 }

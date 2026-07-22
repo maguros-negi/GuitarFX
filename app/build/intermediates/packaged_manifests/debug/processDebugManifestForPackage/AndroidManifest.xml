@@ -29,7 +29,6 @@
         android:debuggable="true"
         android:extractNativeLibs="false"
         android:label="GuitarFX"
-        android:testOnly="true"
         android:theme="@style/Theme.GuitarFX"
         android:usesCleartextTraffic="false" >
         <activity

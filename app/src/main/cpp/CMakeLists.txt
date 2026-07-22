@@ -8,6 +8,10 @@ add_library(guitarfx SHARED
     DynamicEffectInstance.cpp
     EffectFactory.cpp
     DelayEffect.cpp
+    DistortionEffect.cpp
+    FuzzEffect.cpp
+    PreampEffect.cpp
+    CabinetEffect.cpp
     EffectChain.cpp
     NoiseGateEffect.cpp
     OverdriveEffect.cpp

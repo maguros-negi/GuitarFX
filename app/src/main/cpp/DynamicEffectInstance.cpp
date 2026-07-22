@@ -4,6 +4,10 @@
 #include "NoiseGateEffect.h"
 #include "OverdriveEffect.h"
 #include "ThreeBandEqEffect.h"
+#include "DistortionEffect.h"
+#include "FuzzEffect.h"
+#include "PreampEffect.h"
+#include "CabinetEffect.h"
 
 #include <utility>
 
@@ -80,6 +84,32 @@ bool DynamicEffectInstance::setDelayParameters(
     auto* effect = dynamic_cast<DelayEffect*>(effect_.get());
     if (!effect) return false;
     effect->setParameters(timeMs, feedback, mix);
+    return true;
+}
+
+
+bool DynamicEffectInstance::setDistortionParameters(float distortion, float bass, float middle, float treble, float level) noexcept {
+    auto* effect = dynamic_cast<DistortionEffect*>(effect_.get());
+    if (!effect) return false;
+    effect->setParameters(distortion, bass, middle, treble, level);
+    return true;
+}
+bool DynamicEffectInstance::setFuzzParameters(float fuzz, float tone, float bias, float level) noexcept {
+    auto* effect = dynamic_cast<FuzzEffect*>(effect_.get());
+    if (!effect) return false;
+    effect->setParameters(fuzz, tone, bias, level);
+    return true;
+}
+bool DynamicEffectInstance::setPreampParameters(float gain, float bass, float middle, float treble, float presence, float master) noexcept {
+    auto* effect = dynamic_cast<PreampEffect*>(effect_.get());
+    if (!effect) return false;
+    effect->setParameters(gain, bass, middle, treble, presence, master);
+    return true;
+}
+bool DynamicEffectInstance::setCabinetParameters(float cabinetModel, float micPosition) noexcept {
+    auto* effect = dynamic_cast<CabinetEffect*>(effect_.get());
+    if (!effect) return false;
+    effect->setParameters(cabinetModel, micPosition);
     return true;
 }
 

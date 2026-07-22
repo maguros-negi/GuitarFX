@@ -131,20 +131,49 @@ bool DynamicEffectChain::setEffectParameters(
 
     switch (instance->modelId()) {
         case EffectModelId::NoiseGate:
+        case EffectModelId::TightNoiseGate:
             return parameters.size() >= 3 && instance->setNoiseGateParameters(
                     parameters[0], parameters[1], parameters[2]
             );
         case EffectModelId::ClassicOverdrive:
+        case EffectModelId::MidBoostOverdrive:
+        case EffectModelId::TransparentOverdrive:
             return parameters.size() >= 3 && instance->setOverdriveParameters(
                     parameters[0], parameters[1], parameters[2]
             );
         case EffectModelId::ThreeBandEq:
+        case EffectModelId::ScoopEq:
             return parameters.size() >= 3 && instance->setThreeBandEqGains(
                     parameters[0], parameters[1], parameters[2]
             );
         case EffectModelId::DigitalDelay:
+        case EffectModelId::SlapbackDelay:
+        case EffectModelId::AmbientDelay:
             return parameters.size() >= 3 && instance->setDelayParameters(
                     parameters[0], parameters[1], parameters[2]
+            );
+        case EffectModelId::Distortion:
+        case EffectModelId::ModernDistortion:
+            return parameters.size() >= 5 && instance->setDistortionParameters(
+                    parameters[0], parameters[1], parameters[2], parameters[3], parameters[4]
+            );
+        case EffectModelId::VintageFuzz:
+        case EffectModelId::GatedFuzz:
+            return parameters.size() >= 4 && instance->setFuzzParameters(
+                    parameters[0], parameters[1], parameters[2], parameters[3]
+            );
+        case EffectModelId::Preamp:
+        case EffectModelId::CleanPreamp:
+        case EffectModelId::HighGainPreamp:
+            return parameters.size() >= 6 && instance->setPreampParameters(
+                    parameters[0], parameters[1], parameters[2], parameters[3], parameters[4], parameters[5]
+            );
+        case EffectModelId::Cabinet:
+        case EffectModelId::Cabinet1x12:
+        case EffectModelId::Cabinet2x12:
+        case EffectModelId::Cabinet4x12:
+            return parameters.size() >= 2 && instance->setCabinetParameters(
+                    parameters[0], parameters[1]
             );
     }
     return false;
